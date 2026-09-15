@@ -15,13 +15,6 @@
     useNetworkd = true;
 
     # 防火墙配置
-    #
-    # ⚠️ 端口表绑在**接口名**上：宿主机地址从 br-lan 挪到 mv-shim 时这张表
-    #    必须一起改。漏改不会报错，只会让下面所有服务静默被挡在门外。
-    #
-    # 不再有 br-wan / tailscale0 的放行：宿主在 WAN 侧没有地址；tailscale
-    # 现在是容器（.4）而不是宿主进程，远端 tailnet 客户端经它的子网路由
-    # 到达宿主机时，报文是从 mv-shim 进来的，同样走这张表。
     firewall = {
       enable = true;
 
