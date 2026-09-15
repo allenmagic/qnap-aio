@@ -615,7 +615,7 @@ containers.tailscale = {
   privateNetwork = true;
   macvlans = [ "enp3s0" ];
   bindMounts."/var/lib/tailscale" = {
-    hostPath = "/persist/tailscale-state";
+    hostPath = "/srv/data/tailscale";
     isReadOnly = false;
   };
   extraFlags = [
@@ -727,7 +727,7 @@ containers.dnsmasq = {
   bindMounts = {
     # 租约库必须持久化：容器重建后 DHCP 不能把已发出的地址再发一遍
     "/var/lib/misc" = {
-      hostPath = "/persist/dnsmasq";
+      hostPath = "/srv/data/dnsmasq";
       isReadOnly = false;
     };
   };
@@ -765,7 +765,7 @@ containers.dnsmasq = {
 
 - **`dhcp-option` 的 3 和 6 都是 VIP**，这是整条分流链路的起点，写错等于放弃代理。
 - **租约文件必须落宿主持久目录**。容器用 `bindMounts` 把 `/var/lib/misc`
-  （dnsmasq 默认的租约目录）挂到 `/persist/dnsmasq`；否则容器一重建，
+  （dnsmasq 默认的租约目录）挂到 `/srv/data/dnsmasq`；否则容器一重建，
   dnsmasq 忘了发过哪些地址，会和还活着的客户端撞 IP。
 - `bind-dynamic` 而不是 `bind-interfaces`：前者能跟随接口/地址变化，
   以后调整网络不需要重启服务。
@@ -813,7 +813,7 @@ Tailscale：
 ```nix
 containers.tailscale = {
   bindMounts."/var/lib/tailscale" = {
-    hostPath = "/persist/tailscale-state";
+    hostPath = "/srv/data/tailscale";
     isReadOnly = false;
   };
 };
@@ -824,7 +824,7 @@ Cloudflared：
 ```nix
 containers.cloudflared = {
   bindMounts."/etc/cloudflared" = {
-    hostPath = "/persist/cloudflared";
+    hostPath = "/srv/data/cloudflared";
     isReadOnly = false;
   };
 };
@@ -835,7 +835,7 @@ dnsmasq（DHCP 租约库）：
 ```nix
 containers.dnsmasq = {
   bindMounts."/var/lib/misc" = {
-    hostPath = "/persist/dnsmasq";
+    hostPath = "/srv/data/dnsmasq";
     isReadOnly = false;
   };
 };

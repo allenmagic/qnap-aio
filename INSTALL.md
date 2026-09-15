@@ -1,6 +1,6 @@
 # 从零安装指南
 
-从一台全新的 QNAP TS-564 裸机开始，到运行着完整 NAS 服务 + Alpine 路由 VM 的 NixOS 系统。
+从一台全新的 QNAP TS-564 裸机开始，到运行着完整 NAS 服务 + 一组网关容器的 NixOS 系统。
 
 ## 0. 准备清单
 
@@ -15,28 +15,39 @@
 **软件（提前下载）**
 
 - [NixOS minimal ISO](https://nixos.org/download/)（x86_64）
-- [Alpine virt ISO 3.24.1](https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-virt-3.24.1-x86_64.iso)（拷到 NAS 的 `/srv/data` 或临时目录备用）
 
 **信息准备**
 
 - 你的 SSH 公钥（写入 `modules/users/nas-user.nix`）
-- 规划好的密码：root 密码（仅控制台）、nas 系统密码（Cockpit 用）、Samba 密码
+- 规划好的密码：root 密码（仅控制台）、nas 系统密码（sudo/SSH 密码登录用）、Samba 密码
+- 三个网关密钥：Tailscale authkey、Headscale authkey、Cloudflare Tunnel token
 
 **网络规划**
 
 ```
-上行（现有路由器 LAN 口）
+上行（光猫/上级路由）
   │
-  │ eno1（QNAP 网口1，无宿主机 IP）
+  │ wan0（原 enp2s0，宿主机不配 IP）
   ▼
-br-wan ── Alpine VM eth0 (DHCP)
-              │ NAT/防火墙
-           Alpine VM eth1: 192.168.10.1
+  ├── main-router 容器 eth1   VRRP MASTER，策略分流
+  └── side-router 容器 eth1   VRRP BACKUP，降级直连
+
+内网
   │
-br-lan（eno2，QNAP 网口2）
-  ├── NAS 宿主机 192.168.10.2
-  └── 内网设备 192.168.10.100-200（VM 提供 DHCP）
+  │ lan0（原 enp3s0，宿主机不配 IP）
+  ▼
+  ├── main-router.eth0  .2 ┐
+  ├── side-router.eth0  .3 ├─ VRRP 浮动网关 .1（下游的默认网关与 DNS）
+  ├── tailscale.eth0    .4 │
+  ├── cloudflared.eth0  .6 │
+  ├── dnsmasq.eth0      .7 ┘  DHCP 服务器
+  └── 宿主机 mv-shim    .250（macvlan shim，管理通道）
+     内网设备 .100-.200（dnsmasq 提供 DHCP）
 ```
+
+> ⚠️ 接口名 `wan0`/`lan0` 是**按 MAC 锚定**的（`modules/network/links.nix`），
+> 不是内核给的 `enpXsY`。改名由 udev 在设备出现时处理，**必须重启才生效**，
+> 生效后旧名消失。
 
 ## 1. 制作启动盘并进入安装环境
 
@@ -46,7 +57,7 @@ sudo dd if=nixos-minimal-xxx-x86_64.iso of=/dev/sdb bs=4M status=progress && syn
 ```
 
 1. 插入**全部 5 块硬盘**和 U 盘，QNAP 开机进 BIOS/引导菜单，从 U 盘启动
-2. **网线：eno1 接到现有路由器 LAN 口**（安装阶段需要 DHCP 上网下载包）
+2. **网线：把接上级路由的那根插到 QNAP 的 WAN 口**（安装阶段需要 DHCP 上网下载包）
 3. 进入 ISO 后确认网络：
 
 ```bash
@@ -54,7 +65,7 @@ ip a          # 确认有接口拿到了 DHCP 地址
 ping -c 3 8.8.8.8
 ```
 
-> 备注：ISO 环境下网口都是自动 DHCP 的，装完系统后才会按配置变成 br-wan/br-lan。
+> 备注：ISO 环境下网口都自动 DHCP，装完系统后才会按配置变成 `wan0`/`lan0` 并交给容器。
 
 ## 2. 磁盘分区与 RAID 创建
 
@@ -129,7 +140,7 @@ cd /mnt/etc/nixos
 mv hardware-configuration.nix /tmp/hardware-configuration.nix
 rm configuration.nix
 
-git clone https://github.com/allenmagic/qnap-nixos-nas.git .
+git clone git@github.com:allenmagic/qnap-aio.git .   # 私有仓库，需要凭证
 mv /tmp/hardware-configuration.nix .
 
 # 关键：flake 只能读取 git 跟踪的文件
@@ -172,14 +183,15 @@ reboot
 
 ## 4. 首次启动与基础配置
 
-> ⚠️ **此时 br-lan 上没有 DHCP 和网关**（Alpine 路由 VM 还没创建）。NAS 自身也没有外网（网关指向还不存在的 192.168.10.1）。
+> ⚠️ **此时内网上还没有 DHCP 和网关**（dnsmasq 容器还没起来）。NAS 自身也没有外网
+> ——它的默认路由指向浮动网关 `.1`，而 `.1` 要等 main-router 或 side-router 接管。
 
 **登录方式（二选一）**：
 
-- **方案 A（推荐）**：笔记本网线接 **eno2**，手动设置静态 IP `192.168.10.100/24`，然后：
+- **方案 A（推荐）**：笔记本网线接到 QNAP 的**内网口**，手动设置静态 IP `192.168.10.100/24`，然后：
 
   ```bash
-  ssh nas@192.168.10.2    # 用第 3.3 步配置的密钥
+  ssh nas@192.168.10.250    # 用第 3.3 步配置的密钥
   ```
 
 - **方案 B**：HDMI 接显示器 + USB 键盘，控制台用 root 登录（第 3.4 步设的密码）。控制台已启用 kmscon + Noto Sans CJK 字体（`modules/system/console.nix`），可正常显示中文；若开机后 TTY 无显示，说明 i915 DRM 初始化异常，排查 `journalctl -u kmsconvt@tty1`。
@@ -197,7 +209,7 @@ sudo cat /var/lib/sops-nix/key.txt | grep "public key:"
 sudo smbpasswd -a nas
 
 # 3. nas 系统密码已预填（modules/users/nas-user.nix 的 hashedPassword，
-#    Cockpit/sudo/SSH 密码登录共用）。如需更换：openssl passwd -6
+#    sudo/SSH 密码登录共用）。如需更换：openssl passwd -6
 #    （或 mkpasswd -m sha-512）重新生成替换后 rebuild。
 sudo nixos-rebuild switch --flake .#default
 
@@ -208,113 +220,156 @@ btrfs filesystem show          # 数据卷 RAID1 应显示两块成员盘
 btrfs device stats /srv/data   # 校验错误计数应为 0
 ```
 
-## 5. 启用 Router VM
+## 5. 部署网关容器
 
-VM 全声明式：镜像与消费端模块都在 router-image 仓库（flake input 已引用，
-`services.router-vm` 已在 `modules/virtualization/default.nix` 中启用）。
+网关容器全声明式（`modules/gateway/*.nix`），随 `nixos-rebuild switch` 一起生效。
 
 ```bash
 # 1. 重建系统
 sudo nixos-rebuild switch --flake .#default
 
-# 2. 重启宿主（isolcpus 内核参数生效需要）
+# 2. 重启宿主 —— **必须**：物理口改名（enpXsY → wan0/lan0）由 udev 在设备
+#    出现时处理，switch 不会重命名一个正在用的接口
 sudo reboot
 ```
 
-重启后 VM 自动启动（fetchurl 拉镜像 → rootfs 只读副本 → cloud-hypervisor →
-tap 自动挂桥）。验证：
+重启后五个容器自动启动。验证：
 
 ```bash
-systemctl status router-vm                 # VM 服务状态
-systemctl status router-vm-deploy          # 密钥注入（无密钥时为空注入，属正常）
-router-vm-console                          # VM 串口输出（网络故障时的排障通道）
-ping -c 3 192.168.10.1                     # VM LAN 口可达
+# 接口名已切换（应看到 wan0 / lan0 / mv-shim，不再是 enp2s0/enp3s0）
+ip -br link
+
+# 宿主机自己的地址与路由
+ip -br addr show mv-shim                   # 应有 192.168.10.250/24
+ip route                                   # 默认路由应指向 192.168.10.1
+
+# 五个容器都起来了
+systemctl list-units 'container@*'
+
+# 浮动网关在 main-router 手里（正常态）
+sudo nixos-container run main-router -- ip -br addr show eth0   # 应有 .2 与 .1
+
+# side-router 待命
+sudo nixos-container run side-router -- systemctl status keepalived
+
+# 下游能拿到地址（笔记本改成 DHCP 后）
+ping -c 3 192.168.10.1
 ```
+
+> ⚠️ WAN 侧第一次起会有两个容器同时要 DHCP 租约（改造前只有一个 VM 在拨号）。
+> 上游只允许单客户端时需要改用串行方案，见 `docs/gateway.md` §15.2。
 
 ## 6. 配置密钥（sops-nix）
 
-密钥由宿主 sops-nix 加密进 git、解密到 `/run/secrets`，`router-vm-deploy`
-在 **每次 VM 启动后自动注入** guest（guest 无状态，重启即清、重新注入）。
+密钥由宿主 sops-nix 加密进 git、解密到 `/run/secrets`，容器启动时由
+systemd-nspawn 的 `--load-credential` 读入容器（落在
+`/run/credentials/@system/`，内存，容器内不留副本）。
 
 ```bash
-# 1. 生成 age 密钥（首次）
+# 1. 生成 age 密钥（第 4 步已生成过则跳过）
 sudo mkdir -p /var/lib/sops-nix
 sudo age-keygen -o /var/lib/sops-nix/key.txt
 
 # 2. 创建 secrets/secrets.yaml 并用 age 公钥加密（内容示例见
 #    modules/security/sops.nix 的注释）：
-#      ssh-public-key: |
-#        ssh-ed25519 AAAA... deploy-key
 #      tailscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx
-#      cloudflared-token: eyJhIjoi...
+#      headscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx
+#      cloudflared-token:  eyJhIjoi...
 cd secrets && sops -e secrets.yaml  # 或 sops edit secrets.yaml 交互编辑
 
-# 3. 在 modules/security/sops.nix 中取消对应 secrets 声明的注释
-
-# 4. 重建生效
+# 3. 重建生效
 sudo nixos-rebuild switch --flake .#default
-sudo systemctl restart router-vm-deploy    # 立即补注入（或重启 VM 自动触发）
 ```
 
-### Tailscale 登录（自动）
+> 密钥值**不要带尾换行**（`sops set` 容易带上）。当前三个消费方都是
+> `$(cat ...)` 取值、命令替换会剥掉换行；换成直接把文件当 token 读的写法
+> 就会把换行一起送进去，认证失败且报错指向不明。
 
-注入 authkey 后 deploy 自动启动 tailscaled 并后台 `tailscale up` 登录
-（authkey 经 config.json 的 `file:` 机制被读取）。**key 必须是「可复用
-（Reusable）」类型**——guest 无状态，每次重启都重新登录，一次性 key 第二次
-注入即失效；建议勾选「Ephemeral」，重启产生的旧节点离线后自动移除。设备
-审批（Device approval）在 Tailscale admin 侧处理，或配 ACL auto-approve。
+### Tailscale / Headscale 登录
+
+两个实例都由各自的 `tailscale up` 自动登录（authkey 从凭据目录读取）。
+
+**key 建议用「可复用（Reusable）」类型**：节点身份虽然持久化在
+`/srv/data/tailscale/`，但容器重建或状态盘丢失时会重新注册，一次性 key
+第二次就失效。子网路由（`192.168.10.0/24`）需要在 Tailscale admin 与
+Headscale 侧分别 approve。
 
 ```bash
-ssh root@192.168.10.1 'tailscale status'   # 确认已登录（每次 VM 重启 = 新节点身份）
+sudo nixos-container run tailscale -- tailscale status
+sudo nixos-container run tailscale -- tailscale --socket=/run/headscale/tailscaled.sock status
 ```
 
 ### 验证
 
-**VM 内部**（`router-vm-shell`）：
+**容器内部**：
 
 ```bash
-rc-status                  # dnsmasq/chronyd/sshd/nftables 应已启动
-ip -brief addr             # eth0=DHCP(WAN)、eth1=192.168.10.1
-nft list ruleset | head    # 规则应包含 eth0/eth1 和 192.168.10.0/24
-cat /root/.ssh/authorized_keys   # deploy 注入的 SSH 公钥
+# main-router：分流与 VRRP
+sudo nixos-container run main-router -- ip -br addr        # eth0=.2 + .1(VIP)，eth1=DHCP
+sudo nixos-container run main-router -- nft list ruleset | head
+sudo nixos-container run main-router -- systemctl status keepalived
+
+# dnsmasq：DHCP 与租约
+sudo nixos-container run dnsmasq -- cat /var/lib/dnsmasq/dnsmasq.leases
+
+# side-router：待命与 DNS 转发规则
+sudo nixos-container run side-router -- systemctl status keepalived
+sudo nixos-container run side-router -- nft list ruleset | grep -A3 prerouting
 ```
 
-**客户端验证**（笔记本从静态 IP 改回 DHCP，仍接 eno2）：
+**客户端验证**（笔记本从静态 IP 改回 DHCP，接内网口）：
 
 ```bash
-ip a                       # 应拿到 192.168.10.100-200 的地址，网关 192.168.10.1，DNS 192.168.10.1
-ping -c 3 8.8.8.8          # 外网连通（经 VM NAT）
-nslookup baidu.com 192.168.10.1   # DNS 解析正常
-ping -c 3 192.168.10.2      # 内网到 NAS 连通
+ip a                       # 应拿到 192.168.10.100-200，网关 192.168.10.1，DNS 192.168.10.1
+ping -c 3 8.8.8.8          # 外网连通（经 main-router 的 NAT/分流）
+ping -c 3 192.168.10.250   # 内网到 NAS 连通
 ```
 
-> 此时 NAS 宿主机也通过 VM 网关获得了外网访问。
+> 测 DNS 分流前先 `systemctl stop nscd`：宿主机与容器都跑 nscd，
+> `getent`/`curl` 的解析会走 nscd 的 socket（由 nscd 在宿主命名空间里查），
+> 容易得出"分流生效"的假象。
 
-## 7. Cockpit 与收尾
+> 此时 NAS 宿主机也通过浮动网关获得了外网访问（默认路由指向 `.1`）。
 
-1. 浏览器访问 **http://192.168.10.2:9090**，用 `nas` + 第 4 步设置的系统密码登录
-   （VM 管理不在 Cockpit——router VM 由 systemd 声明式管理：`systemctl status router-vm`）
+## 7. 收尾
 
+1. 浏览器访问 **http://192.168.10.250:8080**，用 `nas` 登录 Glance 仪表盘
+   （系统没有 Cockpit，Web 管理走它；其余用 SSH）
+
+> ⚠️ **必须逐条验证的真机项**（这些在开发机上无法验证，只能上机确认）：
+> - macvlan 接口的 MAC 能否靠容器内 udev `.link` 固定住（`ip link` 看是否等于配置值）
+> - 两个容器的**单播 VRRP** 是否真能互通（`tcpdump -i eth0 -n proto 112`）
+> - dnsmasq 能否收到**广播** DHCP 请求（macvlan 下广播是否正常送达）
+> - WAN 侧上游是否接受两个容器各自的 DHCP 租约
+> - side-router 的 WAN 健康检查失败时是否真的进 FAULT（不会接管 VIP）
 
 ## 8. 验收清单
 
 - [ ] 重启 NAS 后 Btrfs RAID1 数据卷自动挂载（`btrfs filesystem show` 显示两个成员）
-- [ ] br-lan 客户端自动获取 DHCP 地址，外网与 DNS 正常
-- [ ] Samba 共享可挂载（`\\192.168.10.2\data`，用户名 nas）
-- [ ] NFS 共享可挂载（`mount -t nfs -o vers=4 192.168.10.2:/ /mnt`，应看到 data/cache/backup 三个目录）
-- [ ] Syncthing(8384)、Navidrome(4533)、Feishin(9180) 端口可达
-- [ ] Cockpit 登录正常
+- [ ] 接口名已是 `wan0`/`lan0`（不再是 `enp2s0`/`enp3s0`），且 `mv-shim` 有 `192.168.10.250/24`
+- [ ] 五个容器全部 running（`systemctl list-units 'container@*'`）
+- [ ] 浮动网关 `.1` 在 main-router 的 eth0 上；停掉它之后漂移到 side-router
+- [ ] 下游客户端自动获取 DHCP 地址，网关与 DNS 都是 `.1`
+- [ ] 被墙域名走隧道、境内直连（分流生效；测之前先 `systemctl stop nscd`）
+- [ ] Samba 共享可挂载（`\\192.168.10.250\data`，用户名 nas）
+- [ ] NFS 共享可挂载（`mount -t nfs -o vers=4.2 192.168.10.250:/ /mnt`，应看到 data/cache/backup 三个目录）
+- [ ] Syncthing(8384)、Navidrome(4533)、Feishin(9180)、Glance(8080) 端口可达
 - [ ] 宿主 `sensors` 有风扇/温度读数，qnap8528 模块已加载
 
 ## 附录 A：默认地址与端口
 
 | 项目 | 值 |
 |---|---|
-| NAS 宿主机 | 192.168.10.2（br-lan） |
-| Alpine VM LAN | 192.168.10.1（网关/DNS） |
-| DHCP 池 | 192.168.10.100 - 192.168.10.200 |
+| 浮动网关 VIP（下游网关/DNS） | 192.168.10.1（VRRP，main-router 或 side-router 持有） |
+| main-router | 192.168.10.2 |
+| side-router | 192.168.10.3 |
+| tailscale 容器 | 192.168.10.4 |
+| cloudflared 容器 | 192.168.10.6 |
+| dnsmasq 容器 | 192.168.10.7 |
+| NAS 宿主机 | 192.168.10.250（mv-shim） |
+| DHCP 池 | 192.168.10.100 - 192.168.10.200（dnsmasq） |
 | SSH | 22（内网与 Tailscale 可密码登录，其他来源仅密钥） |
-| Cockpit | 9090（br-lan） |
+| Glance | 8080 |
 | Samba | 139/445 |
 | NFS | 2049 |
 | Syncthing | 8384（UI）/ 22000（同步） |
@@ -327,8 +382,11 @@ ping -c 3 192.168.10.2      # 内网到 NAS 连通
 |---|---|
 | 重启后数据卷未挂载 | `btrfs device scan && mount /srv/data`；确认 filesystem.nix 卷标与 `mkfs.btrfs -L` 一致 |
 | flake 报 not tracked by Git | `git add -N -f hardware-configuration.nix` |
-| VM 无法启动 | `journalctl -u router-vm -b`、`router-vm-console`（串口输出）、`systemctl status router-vm-deploy`（密钥注入） |
-| DHCP 客户端拿不到地址 | VM 内检查 `rc-service dnsmasq status`、`cat /etc/dnsmasq.d/10-dhcp-eth1.conf` |
-| 外网不通但 VM 正常 | VM 内 `nft list ruleset` 检查 NAT 规则、`ip route` 检查默认路由 |
-| Cockpit 登录失败 | 确认 nas 系统密码已设置并 `nixos-rebuild switch` 过 |
+| 宿主完全没有网络 | `ip -br addr show mv-shim`；`ip link show lan0`；若改名没生效说明没重启 |
+| 容器起不来 | `journalctl -u container@<名字> -b`；多半是 bindMount 源目录不存在 |
+| 浮动网关没接管 | 两个容器各自 `ip -br addr`；`tcpdump -i eth0 -n proto 112` 看心跳是否互通（收不到 ⇒ 防火墙/接口名） |
+| DHCP 客户端拿不到地址 | dnsmasq 容器内 `systemctl status dnsmasq`、`cat /var/lib/dnsmasq/dnsmasq.leases`；确认 67/udp 已放行 |
+| 外网不通但容器正常 | 容器内 `nft list ruleset` 看 masquerade 是否打在 WAN 口上、`ip route` 看默认路由 |
+| 分流失效（境内网站也走代理） | 先 `systemctl stop nscd` 再测；确认 DHCP 下发的 option 6 是 `.1` 而不是某个容器地址 |
+| 隧道容器登录失败 | `nixos-container run tailscale -- journalctl -u tailscaled -n 50`；确认密钥已注入且无尾换行 |
 | qnap8528 未加载 | `sudo modprobe qnap8528`，`dmesg \| grep qnap8528` |

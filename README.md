@@ -1,14 +1,16 @@
-# QNAP TS-564 NixOS NAS Configuration
+# QNAP TS-564 NixOS 一体化网关宿主
 
-基于 NixOS 的 QNAP TS-564 NAS 系统配置，使用 Flakes 进行声明式管理。
+基于 NixOS 的 QNAP TS-564 NAS 配置：一台机器同时做 NAS 与内网网关，
+使用 Flakes 进行声明式管理。
 
 ## 特性
 
 - **声明式配置**: 所有配置通过 Nix 管理，可重现、可回滚
 - **QNAP 硬件支持**: 集成 qnap8528 内核模块，支持风扇控制、LED、温度传感器
-- **Alpine Router VM**: 使用独立 VM 处理网络路由、NAT、DHCP、DNS
-- **Web 管理**: Cockpit Web 界面管理虚拟机与系统（插件可扩展）
+- **透明网关容器**: 策略分流 VPN + 高可用浮动网关（VRRP），宿主机保持纯二层
+- **旁路服务**: Tailscale（官方 + 自建 headscale）、Cloudflare Tunnel 各自独立容器
 - **存储服务**: Samba、NFS、Syncthing、WebDAV、Navidrome
+- **下载与网盘**: qBittorrent、aria2、OpenList
 - **仪表盘**: Glance 起始页，汇总各服务入口，自带登录认证
 - **安全管理**: sops-nix 加密密钥管理、SSH 密钥认证
 - **自动化维护**: 定期垃圾回收、SMART 监控、SSD Trim
@@ -18,7 +20,7 @@
 - **型号**: QNAP TS-564
 - **CPU**: Intel N5095 (4核)
 - **内存**: 8GB
-- **网络**: 2×2.5G 网口 (eno1/eno2)
+- **网络**: 2×2.5G 网口（Intel igc / I225，配置中按 MAC 锚定命名为 `wan0`/`lan0`）
 - **存储**:
   - 1×256GB SSD (系统盘)
   - 1×1TB SSD (缓存盘)
@@ -41,75 +43,53 @@
 ├── modules/
 │   ├── system/                        # 基础系统配置（语言、软件包、Nix 设置）
 │   ├── hardware/                      # 硬件相关（风扇、传感器）
-│   ├── network/                       # 网络配置（桥接、防火墙）
-│   ├── virtualization/                # Alpine Router MicroVM（flake 模块引用）
-│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、Cockpit
+│   ├── network/                       # 网络配置（物理口命名、macvlan shim、防火墙）
+│   ├── gateway/                       # 网关容器组（main/side/dnsmasq/tailscale/cloudflared）
+│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList
 │   ├── security/                      # SSH、sops-nix
 │   └── users/                         # 用户配置
 ├── secrets/
 │   ├── README.md                      # sops-nix 使用指南
 │   └── secrets.yaml                   # 加密的密钥文件（需手动创建）
 
-## Router VM 架构
+## 网关架构
 
-VM 的生命周期由 [router-image](https://github.com/allenmagic/router-image)
-仓库全权管理：
+宿主机**纯二层**（不做转发），三层全部在 systemd-nspawn 容器里。没有虚拟机、
+没有网桥：容器用 macvlan 直接挂到物理口上。
 
-| 环节 | 位置 |
-|---|---|
-| 内核 + 镜像生产（自建内核 + rootfs + 配置烙入） | router-image CI → release asset（两件套） |
-| 消费端声明（fetchurl、cloud-hypervisor systemd 单元、tap 挂桥、deploy） | `router-image` 的 `nixosModules.router`（本仓库 flake input 引用） |
-| 密钥注入 | 宿主 sops-nix（secrets.yaml）→ `router-vm-deploy` 每次 VM 启动后自动注入 |
+```text
+上游光猫 ── wan0 ─┬─ main-router.eth1   (VRRP MASTER, YunShu 策略分流)
+                  └─ side-router.eth1   (VRRP BACKUP, 降级直连 NAT)
 
-```nix
-# 完整配置参考（模块已 import 并启用，见 modules/virtualization/default.nix）
-services.router-vm = {
-  # ── 总开关 ──
-  enable = true;
-  #   启用 Router VM。enable 后需重启宿主（isolcpus 内核参数生效需要）；
-  #   宿主桥 br-wan/br-lan 须已由 modules/network/bridges.nix 创建。
-
-  # ── 发行版 ──
-  os = "alpine";
-  #   rootfs 发行版：alpine（默认）| gentoo（均为 musl+OpenRC）。
-
-  # ── CPU ──
-  cpu = 0;
-  #   隔离给 VM 独占的宿主核号：isolcpus=N + rcu_nocbs=N，宿主调度器
-  #   不再使用该核；vcpu0 经 CH affinity pin 到该核。默认 0。
-  #   ⚠️ 核号必须真实存在，改此参数需重启宿主。
-  vcpus = 2;
-  #   vCPU 总数：vcpu0 独占 `cpu` 指定的隔离核，其余 vCPU 由宿主调度器
-  #   在非隔离核上动态调度。默认 2（1 独占 + 1 动态）。
-
-  # ── 内存 ──
-  mem = 512;
-  #   guest 内存上限（MB）。
-  initialBalloonMem = 256;
-  #   初始 balloon 大小（MB，CH 要求 128M 对齐）：guest 实际可用 =
-  #   mem - balloon；宿主 OOM 时自动放气归还（deflate_on_oom）。
-  #   默认 512 / 256。
-
-  # ── 网络桥（须与 modules/network/bridges.nix 一致，一般不用改） ──
-  wanBridge = "br-wan";
-  #   WAN 侧宿主桥：VM 的 preStart 创建 tap "router-wan"，
-  #   networkd 自动将其加入此桥。
-  lanBridge = "br-lan";
-  #   LAN 侧宿主桥（tap "router-lan"）。
-  vmIp = "192.168.10.1";
-  #   VM LAN 口 IP（deploy 通道的 ssh 目标；与 bridges.nix 的网关指向一致）。
-};
+内网 ───── lan0 ─┬─ main-router.eth0   .2
+                 ├─ side-router.eth0   .3   VRRP 浮动网关 .1
+                 ├─ tailscale.eth0     .4
+                 ├─ cloudflared.eth0   .6
+                 ├─ dnsmasq.eth0       .7   DHCP（option 3/6 都下发 .1）
+                 └─ 宿主机 mv-shim     .250 macvlan shim（管理通道）
 ```
 
-**升级镜像**：CI 出 release 自动同步 flake 模块的 tag+sha256 →
-`nix flake update` → `nixos-rebuild` → VM 自动重启（rootfs 只读副本路径含
-内容哈希）→ 密钥自动重新注入（guest 无状态，重启即清）。
-**改密钥**：编辑 `secrets/secrets.yaml` → `nixos-rebuild` →
-`systemctl restart router-vm-deploy`（或重启 VM 自动触发）。
+| 容器 | 职责 |
+|---|---|
+| `main-router` | 主透明网关，按商业 VPN 的策略路由分流（被墙域名走隧道） |
+| `side-router` | 备份直连网关，main 不可用时接管浮动网关，降级为纯直连 |
+| `dnsmasq` | 全网唯一 DHCP；降级态由 side-router 把 53 转发给它 |
+| `tailscale` | 两个 tailscale 实例（官方控制面 + 自建 headscale），子网路由器 |
+| `cloudflared` | 内网服务的内网穿透隧道（token 模式，ingress 在 CF 面板管理） |
+
+**DNS 链路是这套设计的核心**：客户端 DNS 由 DHCP 下发为浮动网关 `.1`——main 持有 VIP 时
+由 YunShu 隧道 DNS 做 fake-IP 分流，漂到 side 时由 side 把 53 转给 dnsmasq。把客户端 DNS
+改成任何容器的固定地址都会让分流静默失效，不要那样改。
+
+`main-router` 由独立仓库 [yunshu-container](https://github.com/allenmagic/yunshu-container)
+提供（本仓库通过 flake input 引用）。**改那个仓库必须 commit 且 push**，否则本仓库求值
+拉到的还是旧版本。
+
+> 📐 设计取舍、实测的性能与资源对比、编址迁移清单见 [`docs/gateway.md`](docs/gateway.md)。
 
 ## 快速开始
 
-> 📖 完整的分步安装指南（含磁盘分区、RAID、Alpine VM 创建、验收清单）见 **[INSTALL.md](INSTALL.md)**。以下为精简流程。
+> 📖 完整的分步安装指南（含磁盘分区、RAID、网关容器配置、验收清单）见 **[INSTALL.md](INSTALL.md)**。以下为精简流程。
 
 ### 1. 准备工作
 
@@ -141,9 +121,9 @@ mount /dev/disk/by-label/boot /mnt/boot
 # 生成硬件配置
 nixos-generate-config --root /mnt
 
-# 克隆本配置仓库
+# 克隆本配置仓库（私有仓库，需要凭证）
 cd /mnt/etc/nixos
-git clone https://github.com/allenmagic/qnap-nixos-nas.git .
+git clone git@github.com:allenmagic/qnap-aio.git .
 
 # 将生成的 hardware-configuration.nix 移动到仓库根目录
 mv hardware-configuration.nix .
@@ -164,7 +144,7 @@ reboot
 
 ```bash
 # SSH 登录
-ssh nas@192.168.10.2
+ssh nas@192.168.10.250
 
 # 生成 sops age 密钥
 sudo mkdir -p /var/lib/sops-nix
@@ -177,18 +157,20 @@ sudo cat /var/lib/sops-nix/key.txt | grep "public key:"
 # 设置 Samba 密码
 sudo smbpasswd -a nas
 
-# 设置 nas 系统密码（Cockpit Web 登录需要；SSH 仍只用密钥）
+# 设置 nas 系统密码（sudo/SSH 密码登录用；SSH 仍只对内网与 Tailscale 网段放行）
 mkpasswd -m sha-512
 # 将输出哈希填入 modules/users/nas-user.nix 的 hashedPassword，然后重建系统
 sudo nixos-rebuild switch --flake .#default
 ```
 
-### 5. 启用 Router VM
+### 5. 配置网关容器的密钥
 
-VM 全声明式（镜像与模块在 router-image 仓库），已在
-`modules/virtualization/default.nix` 中启用 → `nixos-rebuild switch` →
-重启宿主（isolcpus 生效）→ 配置 sops 密钥（secrets.yaml，见 INSTALL.md
-第 6 步）。详细分步见 [INSTALL.md](INSTALL.md)。
+三个密钥（`tailscale-auth-key` / `headscale-auth-key` / `cloudflared-token`）
+由 sops-nix 加密存放，宿主解密后经 systemd-nspawn 的 `--load-credential` 注入容器，
+容器内不留副本。配置方法与验收步骤见 [INSTALL.md](INSTALL.md)。
+
+> ⚠️ **首次部署前必读**：接口改名与编址迁移都需要重启，且都可能让机器失联，
+> 操作顺序见 [`docs/gateway.md`](docs/gateway.md) 附录 A。
 
 
 ## 日常使用
@@ -206,44 +188,48 @@ sudo nixos-rebuild switch --flake .#default
 sudo nixos-rebuild switch --rollback
 ```
 
-### Router VM 配置更新
+### 网关容器更新
 
 ```bash
-# 改配置：router-image 仓库（base/ 或 network.env）→ 触发 CI →
-#         NAS 上 nix flake update + rebuild（VM 自动重启，rootfs 副本路径
-#         含内容哈希；密钥由 router-vm-deploy 自动重新注入）
-nix flake update
+# 改容器代码（main-router 在 yunshu-container 仓库）：
+#   在那个仓库改完 → commit → push（本仓库通过 github: input 引用，
+#   没 push 的话这里拉到的还是旧版本）
+nix flake update yunshu-container
 sudo nixos-rebuild switch --flake .#default
 
-# 改密钥：编辑 secrets/secrets.yaml → rebuild 后手动补注入
+# 改宿主机侧的容器声明（modules/gateway/*.nix）：
 sudo nixos-rebuild switch --flake .#default
-sudo systemctl restart router-vm-deploy
 
-# 或手动 SSH 进入 VM
-router-vm-shell
+# 改密钥：编辑 secrets/secrets.yaml → rebuild。
+#   三个容器密钥都带 restartUnits，值变化时容器会自动重启；
+#   若改了别的密钥（无 restartUnits），需要手动重启对应服务。
+
+# 进容器排障
+sudo nixos-container run main-router -- systemctl status keepalived
+sudo nixos-container run main-router -- ip -br addr
+sudo nixos-container root-shell main-router        # 交互式
 ```
 
 ### 服务管理
 
 ```bash
-# 查看服务状态
+# 查看服务状态（宿主上的）
 systemctl status samba
 systemctl status nfs-server
 systemctl status syncthing
 systemctl status webdav
 systemctl status glance
 systemctl status navidrome
-systemctl status cockpit
 
-# 重启服务
+# 网关容器（NixOS 容器统一是 container@<名字>.service）
+systemctl status container@main-router
+systemctl status container@dnsmasq
+
+# 重启
 sudo systemctl restart samba
 ```
 
-### Cockpit Web 管理
-
-浏览器访问 http://192.168.10.2:9090，用 `nas` 用户和系统密码登录，可管理虚拟机（创建/启动/停止/控制台）。
-
-> 注意：Cockpit 登录使用 PAM 密码认证，需要在 `modules/users/nas-user.nix` 中为 nas 用户设置系统密码（`mkpasswd -m sha-512` 生成哈希填入 `hashedPassword`）。
+> 系统没有 Cockpit（已删除）。Web 管理走 Glance 仪表盘（8080），其余用 SSH。
 
 ### 监控
 
@@ -263,18 +249,17 @@ btrfs device stats /srv/data
 
 ### 修改网络 IP
 
-编辑 `modules/network/bridges.nix`:
+网段散落在十几处，改之前先读 `docs/gateway.md` 附录 A（有一份完整清单）。
+至少包括：
 
-```nix
-"30-br-lan" = {
-  matchConfig.Name = "br-lan";
-  networkConfig = {
-    Address = "192.168.10.2/24";  # 修改这里
-    Gateway = "192.168.10.1";
-    DNS = [ "192.168.10.1" ];
-  };
-};
-```
+- `modules/network/shim.nix`：宿主机的地址/网关/DNS
+- `modules/network/default.nix`：防火墙端口表（**按接口名匹配**，接口名改了这张表也要改）
+- `modules/gateway/*.nix`：各容器的地址、DHCP option 3/6、VRRP 单播地址
+- 各服务的绑定地址：`samba.nix` / `nfs.nix` / `syncthing.nix` / `webdav.nix` /
+  `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix`
+- `modules/security/ssh.nix` 的 `Match Address`
+
+> ⚠️ 浮动网关 VIP 同时是 DHCP 下发的默认网关与 DNS，改它等于改所有下游设备的配置。
 
 ### 添加 Samba 共享
 
@@ -305,7 +290,7 @@ cd /etc/nixos && git pull            # 或本仓库所在路径
 sudo nixos-rebuild switch --flake .#default
 ```
 
-内网访问：`http://192.168.10.2:4918`（端口仅对 br-lan 放行）。
+内网访问：`http://192.168.10.250:4918`（端口仅对内网 mv-shim 放行）。
 
 **公网访问（Cloudflare Tunnel）**：隧道在路由 VM 内以 token 托管模式运行——
 `/etc/cloudflared/config.yml` 只有 token，**ingress 规则在 Cloudflare 面板配置**，
@@ -313,9 +298,9 @@ sudo nixos-rebuild switch --flake .#default
 
 > Zero Trust → Networks → Tunnels → 对应隧道 → Public Hostnames → Add
 > - Subdomain/Domain：如 `webdav.zyx1986.icu`
-> - Service：`HTTP` → `192.168.10.2:4918`（路由 VM 与 NAS 同桥，可直连）
+> - Service：`HTTP` → `192.168.10.250:4918`（路由 VM 与 NAS 同桥，可直连）
 
-回源是内网明文 HTTP（仅 br-lan 一跳），公网侧由 Cloudflare 边缘自动 HTTPS，
+回源是内网明文 HTTP（仅内网一跳），公网侧由 Cloudflare 边缘自动 HTTPS，
 NAS 上无需证书。`behindProxy = true` 让日志按 `X-Forwarded-For` 记录真实客户端 IP。
 
 ⚠️ 公网暴露注意：
@@ -330,7 +315,7 @@ NAS 上无需证书。`behindProxy = true` 让日志按 `X-Forwarded-For` 记录
 汇总本机各 Web 服务入口（Feishin / gonic / Syncthing / Beszel / WebDAV），另有
 时钟、天气（Beijing）、服务器状态。
 
-内网访问：`http://192.168.10.2:8080`，登录用户 `nas`。
+内网访问：`http://192.168.10.250:8080`，登录用户 `nas`。
 
 **认证**：Glance 自带登录（不同于 WebDAV 的 Basic 认证），配置在 `settings.auth`：
 - `secret-key`：base64 的 64 随机字节，必须是**正好 64 字节**（`glance secret:make` 的输出）
@@ -351,7 +336,7 @@ sudo nixos-rebuild switch --flake .#default && sudo systemctl restart glance
 ```
 
 **公网访问**：和 WebDAV 同一套路，Cloudflare Zero Trust 面板加 Public Hostname →
-`HTTP` → `192.168.10.2:8080`。`server.proxied = true` 已开启，Glance 会按
+`HTTP` → `192.168.10.250:8080`。`server.proxied = true` 已开启，Glance 会按
 `X-Forwarded-For` 认客户端 IP——它自带的暴力破解防护（5 次失败封 IP 5 分钟）依赖这一点。
 
 > ⚠️ `bookmarks` 里现在是**内网地址**，从公网打开 Glance 时这些链接点不开。
@@ -394,25 +379,44 @@ sudo mount /srv/data
 btrfs filesystem show
 ```
 
-### Alpine VM 网络问题
+### 网关/网络问题
 
 ```bash
-# 检查桥接状态
-ip link show br-wan
-ip link show br-lan
+# 宿主机侧接口
+ip -br addr                      # 应有 mv-shim 192.168.10.250/24
+ip -br link                      # wan0 / lan0 应为 UP
 
-# 测试连通性
-ping 192.168.10.1
+# 浮动网关在谁手里
+sudo nixos-container run main-router -- ip -br addr show eth0
+sudo nixos-container run side-router -- ip -br addr show eth0
 
-# 进入 VM 检查
-router-vm-shell
+# VRRP 心跳（两个容器应互相看得到对方）
+sudo nixos-container run main-router -- tcpdump -i eth0 -n proto 112
+
+# 连通性
+ping 192.168.10.1                # 浮动网关
+sudo nixos-container run dnsmasq -- journalctl -u dnsmasq -n 50
+
+# 进容器
+sudo nixos-container root-shell main-router
 ```
+
+排查 DNS 分流前先 `systemctl stop nscd`：宿主机与容器都跑 nscd，`getent`/`curl`
+会走 nscd 的 socket（由 nscd 在宿主命名空间里查），容易得出"分流生效"的假象。
 
 ## 设计决策
 
-- **Alpine VM 路由而非 NixOS 原生路由**：复用成熟的 Alpine 路由配置体系；故障隔离（路由问题不影响 NAS 存储服务）；内存占用小（512MB）；网络配置可独立备份与恢复
-- **镜像烙入 + 密钥注入分离**：全部配置在 CI 构建时烙进镜像（出厂即正确），deploy 只注入密钥——配置更新走 CI 单仓库闭环，密钥更新走宿主本地秒级通道
-- **模块化**：每个功能独立一个模块文件（`modules/`），VM 实现集中在 router-image 仓库
+- **容器而非虚拟机**：网关全部是 systemd-nspawn 容器，共享宿主内核，没有 guest 内核、
+  没有 qcow2 镜像副本、没有 isolcpus 独占核（实测对比见 `docs/gateway.md` §4.1）。
+  改造前是 cloud-hypervisor MicroVM 方案。
+- **macvlan 而非桥接**：容器直接拿到物理口的子接口，宿主机不进数据面。
+  宿主机自己用一个 macvlan shim 保留管理通道。
+- **浮动网关 + 双角色 DNS**：VIP 是下游唯一感知的网关；DNS 跟着 VIP 走——
+  main 持有时分流，漂到 side 时降级为直连解析。这是"客户端 DNS 必须经过网关"的必然结果。
+- **职责拆分成多个容器**：网关、DNS、隧道、穿透各自独立，互不牵连；
+  tailscale 的两个实例则合并进一个容器（同一类东西，拆开只是多付一份开销）。
+- **模块化**：每个功能独立一个模块文件（`modules/`）；main-router 的实现在
+  [yunshu-container](https://github.com/allenmagic/yunshu-container) 仓库。
 
 ## 参考文档
 
