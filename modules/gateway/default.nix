@@ -16,9 +16,7 @@
   #   tailscale    .4   lan0:eth0
   #   cloudflared  .6   lan0:eth0
   #   dnsmasq      .7   lan0:eth0               DHCP + 降级态 DNS
-  # 全程 macvlan；宿主机保留 macvlan shim 作为管理通道，br-lan/br-wan 待退役（步骤 3）。
-  #
-  # ⚠️ 改造期间本仓库不可部署：modules/network/bridges.nix 仍在建 br-lan/br-wan。
+  # 全程 macvlan；宿主机保留 macvlan shim 作为管理通道
   imports = [
     ./main-router.nix
     ./side-router.nix
