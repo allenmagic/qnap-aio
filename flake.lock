@@ -155,17 +155,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1789469697,
+        "lastModified": 1789469887,
         "narHash": "sha256-DW81wXI15Ti2LFbAhSh0U7pJh47rXcLs3xUo8dMiPaU=",
-        "ref": "refs/heads/main",
-        "rev": "959aed3e9c9a134d89da4b4144405e51f8daa4df",
-        "revCount": 37,
-        "type": "git",
-        "url": "file:///home/allenmagic/Projects/qnap-nas/yunshu-container"
+        "owner": "allenmagic",
+        "repo": "yunshu-container",
+        "rev": "a107d031bd9d5b3c2a68f557ea7535d746673a76",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "file:///home/allenmagic/Projects/qnap-nas/yunshu-container"
+        "owner": "allenmagic",
+        "repo": "yunshu-container",
+        "type": "github"
       }
     }
   },

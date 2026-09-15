@@ -19,16 +19,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # YunShu 透明网关容器（main-router 由它的 container 模块构建）
+    # YunShu 透明网关容器（main-router 由它的 container 模块构建）。
     #
-    # ⚠️ TODO(发布前必改)：现在是本地路径——`git+file://` 只在本机有效，
-    #    推到 GitHub / 进 CI 会直接解析失败。等 yunshu-container 仓库建好后换成
-    #    url = "github:allenmagic/yunshu-container";
-    #
-    # 用 git+file 而不是 path：与生产（github:）行为一致——**改动必须先 commit**，
-    # 否则 qnap-aio 求值时看不到（未提交的工作区内容不会进 flake 的 git tree）。
+    # 用 github: 而不是 path:/git+file：后者只在本机有效，CI 和 NAS 都拉不到。
+    # 代价是**任何改动都必须 commit 并且 push**，否则别处拉到的还是旧版本
+    # ——本机开发时这一点尤其容易忘，报错还常常是指向不明的"option 不存在"。
     yunshu-container = {
-      url = "git+file:///home/allenmagic/Projects/qnap-nas/yunshu-container";
+      url = "github:allenmagic/yunshu-container";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
