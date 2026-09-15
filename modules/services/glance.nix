@@ -66,16 +66,15 @@
                     { title = "WebDAV"; url = "http://192.168.10.250:4918"; icon = "mdi:folder-network"; alt-status-codes = [ 401 ]; }
                   ];
                 }
-                # 盯 router-image 的 CI 发布：它每次出新镜像都会打 release tag，
-                # 看到新的就该在 NAS 上跑 nix flake update 了。
-                # 你自己的另两个仓库（qnap-nixos-nas / yunshu-nix）目前是
-                # 0 release、0 tag，列进来只会显示空白，所以先不放。
-                # 这个 widget 也能追上游项目（如 glanceapp/glance）——想加说一声。
+                # 盯网关仓库的 CI 发布：出新版本时该在 NAS 上跑 nix flake update。
+                # qnap-aio 本身是宿主配置、不走 release；yunshu-container 是
+                # 网关容器的代码源，值得盯。想加别的仓库（含上游项目，
+                # 如 glanceapp/glance）说一声。
                 {
                   type = "releases";
-                  title = "router-image 发布";
+                  title = "yunshu-container 发布";
                   show-source-icon = true;
-                  repositories = [ "allenmagic/router-image" ];
+                  repositories = [ "allenmagic/yunshu-container" ];
                   collapse-after = 3;
                 }
               ];
