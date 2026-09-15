@@ -77,32 +77,42 @@
       #   mode = "0400";
       # };
 
-      # ── 路由 VM 密钥（services.router-vm 的 deploy 通道）──────────
-      # 文件名必须与 router-image 模块的 secretsDir 约定一致
-      # （<secretsDir>/ssh-public-key 等，默认 /run/secrets）。
+      # ── 网关容器的密钥（tailscale / headscale / cloudflared）────────
+      #
+      # 注入通道：宿主 sops 解密到 /run/secrets → systemd-nspawn 用
+      # --load-credential 在容器启动时读入 → 容器内落在
+      # /run/credentials/@system/<credential-id>（内存，容器内不留副本）。
+      #
+      # 时序**不需要额外处理**：这个版本的 sops-nix 用
+      # activationScripts.setupSecrets 落地密钥，而激活脚本在 systemd 启动
+      # 之前就执行完了，容器起来时凭据一定已就位。
+      #
+      # restartUnits 覆盖的是另一个场景——**密钥轮换**。激活脚本会重写
+      # /run/secrets，但 nspawn 只在容器启动时读一次凭据，不重启就永远
+      # 用着旧值。列在这里的单元会在密钥内容变化时被重启。
+      #
+      # ⚠️ 值不要带尾换行（`sops set` 容易带上）。当前三个消费方都是
+      # `$(cat ...)` 取值，命令替换会剥掉尾换行；换成直接把文件当 token 读
+      # 的写法就会把换行一起送进去，认证失败且报错指向不明。
+      #
       # secrets.yaml 内容示例：
-      #   ssh-public-key: |
-      #     ssh-ed25519 AAAA... deploy-key
       #   tailscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx
       #   headscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx（自建控制面 hs.zyx1986.icu）
       #   cloudflared-token: eyJhIjoi...
-      # 注入语义：router-vm-deploy 在每次 VM 启动后自动 scp 进 guest
-      # /run（guest 无状态，重启即清、重新注入）；tailscale/headscale 注入后自动登录。
-      ssh-public-key = {
-        owner = "root";
-        mode = "0400";
-      };
       tailscale-auth-key = {
         owner = "root";
         mode = "0400";
+        restartUnits = [ "container@tailscale" ];
       };
       headscale-auth-key = {
         owner = "root";
         mode = "0400";
+        restartUnits = [ "container@tailscale" ];
       };
       cloudflared-token = {
         owner = "root";
         mode = "0400";
+        restartUnits = [ "container@cloudflared" ];
       };
 
       # Beszel agent 认证。内容来自 hub UI「Add System」给出的 SSH 公钥，
