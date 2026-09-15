@@ -5,15 +5,12 @@
 # 两个实例互为独立 tailnet，不是主备关系（Tailscale 没有 failover 语义）：
 #   - 官方控制面：接口 tailscale0，UDP 41641
 #   - 自建 Headscale：接口 ts0，UDP 41642，控制面 hs.zyx1986.icu
-# 合并而非拆两个容器：两者只需要一个网络栈和一份 systemd，拆开等于多付一份
-# 容器开销，而它们本来就是同一类东西（见 docs/gateway.md §4.1 末尾）。
 #
 # ⚠️ 两个实例都广告 192.168.10.0/24。这是现状的延续（router-image 的
 # network.env 里 TS_ADVERTISE_ROUTES 与 HEADSCALE_ADVERTISE_ROUTES 相同），
 # 但两个 tailnet 的客户端会各自看到一条重叠路由——它们分属不同 tailnet，
 # 互不影响；别把两个实例理解成"同一张网里的两个出口"。
-#
-# 出站直连：默认网关指向 side-router，不经商业 main（见 docs/gateway.md §6.3）。
+。
 { config, lib, pkgs, ... }:
 
 let
