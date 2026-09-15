@@ -1,8 +1,8 @@
 # main-router —— 主透明网关（VRRP MASTER，持有浮动网关 192.168.10.1）
-# 接入：macvlan 直连两个物理口，容器自己就是网关——自己做 NAT、自己从 WAN
+# 接入：macvlan 直连两个物理口，容器自己就是网关（自己做 NAT、自己从 WAN 要 DHCP）
 #   lan0 ──> eth0   192.168.10.2/24   LAN（VRRP 实例绑在这个口上）
 #   wan0 ──> eth1   DHCP              WAN
-# lan0/wan0 是宿主侧按 MAC 锚定的名字（modules/network/links.nix），
+# lan0/wan0 是宿主侧按 MAC 锚定的名字（modules/network/links.nix）
 
 { config, lib, inputs, ... }:
 

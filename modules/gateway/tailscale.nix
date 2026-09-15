@@ -10,7 +10,7 @@
 # network.env 里 TS_ADVERTISE_ROUTES 与 HEADSCALE_ADVERTISE_ROUTES 相同），
 # 但两个 tailnet 的客户端会各自看到一条重叠路由——它们分属不同 tailnet，
 # 互不影响；别把两个实例理解成"同一张网里的两个出口"。
-。
+
 { config, lib, pkgs, ... }:
 
 let
