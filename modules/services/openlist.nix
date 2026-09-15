@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  lanIp = "192.168.10.2";
+  lanIp = "192.168.10.250";
   httpPort = 5244;
 
   dataDir = "/var/lib/openlist/data";

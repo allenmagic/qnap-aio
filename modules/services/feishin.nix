@@ -22,16 +22,16 @@ in
   # /#/ 形式，无需服务端 tryFiles fallback），nginx 的其余职责（vhost/gzip/
   # no-store 响应头）在内网 HTTP 场景均非必需，darkhttpd 几 KB 即可承载。
   # 公网入口由 Cloudflare Tunnel 提供（VM 内 cloudflared ingress →
-  # http://192.168.10.2:9180，HTTPS/域名在 Cloudflare 侧终结；用子域名
+  # http://192.168.10.250:9180，HTTPS/域名在 Cloudflare 侧终结；用子域名
   # 而非子路径，避免 hash 路由下 assets 绝对路径在子路径下 404）。
-  # 服务器地址不硬编码：内网用户填 http://192.168.10.2:4533，
+  # 服务器地址不硬编码：内网用户填 http://192.168.10.250:4533，
   # 公网用户填 https://<域名>，浏览器里各自填写。
   services.darkhttpd = {
     enable = true;
     port = 9180;
     # darkhttpd 1.17 里 --ipv6（由 networking.enableIPv6 触发）与 IPv4 --addr
     # 冲突（报 malformed --addr argument）。改用 IPv6 通配 ::，dual-stack 下
-    # 同时接受 IPv4（br-wan 无 IP，实际只暴露 br-lan 内网）。
+    # 同时接受 IPv4（WAN 侧宿主不持有地址，实际只在内网可达）。
     address = "::";
     rootDir = "${feishinWebRoot}";
   };

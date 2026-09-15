@@ -9,7 +9,7 @@ let
   aria2Dir = "${downloadRoot}/aria2";
   videoDir = "${downloadRoot}/video";
 
-  lanIp = "192.168.10.2";
+  lanIp = "192.168.10.250";
 
   # qBittorrent 的 serverConfig 会经 nix store 落盘（全员可读），不能放密码。
   # 这里放占位符，启动前由下面的 ExecStartPre 用 sops 里的明文算 PBKDF2 覆盖。
@@ -64,7 +64,7 @@ in
 
       Preferences = {
         WebUI = {
-          Address = lanIp; # 只绑 br-lan
+          Address = lanIp; # 只绑内网 shim
           Username = "nas";
           Password_PBKDF2 = qbPasswordPlaceholder;
         };
@@ -96,7 +96,7 @@ in
       dir = aria2Dir;
       enable-rpc = true;
       rpc-listen-port = 6800;
-      rpc-listen-all = true; # br-wan 上宿主无 IP，实际只在内网可达
+      rpc-listen-all = true; # 宿主在 WAN 侧无地址，实际只在内网可达
       rpc-allow-origin-all = true; # AriaNg 是同源页面但仍需放行
       continue = true;
       "max-concurrent-downloads" = 5;

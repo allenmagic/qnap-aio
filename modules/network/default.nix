@@ -2,9 +2,10 @@
 
 {
   imports = [
-    # 物理网口按 MAC 锚定命名（wan0 / lan0）——必须在 bridges.nix 之前生效
+    # 物理网口按 MAC 锚定命名（wan0 / lan0）——必须排在 shim 之前
     ./links.nix
-    ./bridges.nix
+    # 纯二层 + macvlan shim：宿主机的三层只走 mv-shim
+    ./shim.nix
   ];
 
   # 基础网络配置
@@ -14,17 +15,17 @@
     useNetworkd = true;
 
     # 防火墙配置
+    #
+    # ⚠️ 端口表绑在**接口名**上：宿主机地址从 br-lan 挪到 mv-shim 时这张表
+    #    必须一起改。漏改不会报错，只会让下面所有服务静默被挡在门外。
+    #
+    # 不再有 br-wan / tailscale0 的放行：宿主在 WAN 侧没有地址；tailscale
+    # 现在是容器（.4）而不是宿主进程，远端 tailnet 客户端经它的子网路由
+    # 到达宿主机时，报文是从 mv-shim 进来的，同样走这张表。
     firewall = {
       enable = true;
 
-      # Tailscale 接口（若在 NAS 上直接运行 tailscaled）：
-      # 放行 SSH，供远程密钥登录（密码登录仍由 sshd 的 Match 保持禁用）
-      interfaces.br-wan.allowedTCPPorts = [ 22 ];  # 管理 SSH（192.168.8.10）
-
-      interfaces.tailscale0.allowedTCPPorts = [ 22 ];
-
-      # 在 br-lan 上开放服务端口
-      interfaces.br-lan = {
+      interfaces.mv-shim = {
         allowedTCPPorts = [
           22      # SSH
           139 445 # Samba
@@ -38,9 +39,8 @@
           4533    # 音乐服务端（Navidrome，2026-09-14 从 gonic 回退，端口不变）
           9180    # Feishin Web（音乐前端）
           8090    # Beszel Hub Web UI
-          9090    # Cockpit Web UI（cockpit 已剔除，端口保留待恢复）
-          4918    # WebDAV（客户端直连内网；公网经路由 VM cloudflared 隧道回源）
-          8080    # Glance 仪表盘（同上，公网经 cloudflared 隧道回源）
+          4918    # WebDAV（客户端直连内网；公网经 cloudflared 容器隧道回源）
+          8080    # Glance 仪表盘（同上）
           8081    # qBittorrent Web UI（services/downloads.nix）
           6881    # qBittorrent BT 监听端口（TCP；UDP 见下）
           6800    # aria2 JSON-RPC（AriaNg 页面从浏览器直连它）

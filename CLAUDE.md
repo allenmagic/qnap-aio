@@ -77,7 +77,7 @@ sops secrets/secrets.yaml                         # 编辑加密密钥（需要 
 
 - **NixOS declarative container**（`modules/services/yunshu.nix`，flake input `yunshu-router`——公开仓库，github: URL 匿名拉取）：策略分流 VPN + 透明代理（gatewayMode：容器开 ip_forward/nftables 转发、YunShu 自带 TUN 路由，禁用独立 7890 代理）。veth 挂 br-lan，静态 `192.168.10.3`；直连流量默认路由 = 路由器 VM（`upstreamGateway`）。
 - **浮动网关（VRRP/keepalived）**：内网设备 DHCP 网关 = 浮动 IP `192.168.10.254`（`network.env` 的 `LAN_GATEWAY`）。yunshu 容器为 MASTER（priority 150，持有 .254，策略分流）；Alpine VM 为 BACKUP（`base/keepalived/keepalived.conf`，priority 100，nopreempt——容器不可用时接管 .254，**降级为纯直连 NAT** 保连通）。VRRP 参数（vrid=10/auth_pass=alpine-float/floatIp）三处同步：`network.env` + VM `base/keepalived/` + yunshu-nix 的 container 模块 options。
-- 系统 Web 管理通过 **Cockpit**（9090，`modules/services/cockpit.nix`），当前无插件（cockpit-machines 与 libvirtd 已随 VM 方案迁移退役——CH VM 不归 Cockpit 管）；可按需加 podman/files/zfs 等插件。
+- Cockpit 已删除（含 9090 端口放行）。系统 Web 管理走 `services/glance.nix` 的仪表盘，其余用 SSH。
 
 ### 硬件与密钥
 

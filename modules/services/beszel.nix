@@ -13,7 +13,7 @@
 # 配对流程（已走完，供重建/迁移时参考）：agent 的 KEY 是 **hub 生成的
 # SSH 公钥**，必须先有 hub 才能拿到，所以分两步：
 #   1. 先只跑 hub（agentEnable=false）→ 浏览器打开
-#      http://192.168.10.2:8090 → 建管理员 → Add System → 复制公钥
+#      http://192.168.10.250:8090 → 建管理员 → Add System → 复制公钥
 #   2. 写入 sops（EnvironmentFile 格式，一行）：
 #        sops set secrets/secrets.yaml '["beszel-agent-key"]' \
 #          '"KEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."'
@@ -31,7 +31,7 @@ let
 in
 {
   services.beszel = {
-    # ---- hub：Web 面板（8090，br-lan 放行见 network/default.nix） ----
+    # ---- hub：Web 面板（8090，mv-shim 放行见 network/default.nix） ----
     hub = {
       enable = true;
       host = "0.0.0.0";    # 默认 127.0.0.1；对外访问需全接口

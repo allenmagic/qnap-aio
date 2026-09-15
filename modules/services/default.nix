@@ -20,9 +20,8 @@
     # 网盘聚合（百度/阿里/夸克/GDrive）：Web UI + WebDAV
     ./openlist.nix
     ./webdav.nix
-    # ./cockpit.nix   # 剔除（不引用）：配置文件保留在 services/cockpit.nix，
-    #                 # 需要恢复时取消注释；注意 network/default.nix 里的
-    #                 # 9090 端口放行是独立的，目前仍保留
+    # cockpit 已删除（含其 9090 端口放行）：系统 Web 管理改用 SSH +
+    # services/glance.nix 的仪表盘
     # YunShu 透明网关已移出 services/：改成 macvlan 接入后归到
     # modules/gateway/main-router.nix
   ];

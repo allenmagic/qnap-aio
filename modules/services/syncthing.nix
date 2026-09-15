@@ -13,7 +13,7 @@
     openDefaultPorts = true;
 
     # Web UI 配置
-    guiAddress = "192.168.10.2:8384";
+    guiAddress = "192.168.10.250:8384";
 
     # GUI 密码来自 sops（syncthing-password，明文，syncthing 启动时自己哈希）。
     # 配合 settings.gui.user 完成认证，避免 8384 对内网裸奔。
