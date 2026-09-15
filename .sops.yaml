@@ -1,0 +1,6 @@
+keys:
+  - &nas age1vpnmmac35lscswp0y52h99awvy35xzuhw6vf5qzn8ds6qewpxarq5ynyk9
+creation_rules:
+  - path_regex: secrets/secrets.yaml$
+    key_groups:
+      - age: [*nas]

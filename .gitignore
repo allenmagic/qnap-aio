@@ -1,0 +1,32 @@
+# NixOS build outputs
+result
+result-*
+
+# Hardware configuration (generated during installation)
+/hardware-configuration.nix
+
+# Secrets (encrypted files are tracked, but keep unencrypted local files out)
+secrets/*.yaml.dec
+secrets/*.json.dec
+secrets/key.txt
+secrets/.decrypted~*
+
+# Editor files
+*.swp
+*.swo
+*~
+.*.sw?
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Alpine router deploy secrets (local copy, template is env.example)
+/alpine-router/.env
+
+# Temporary files
+*.tmp
+*.bak
+*.log

@@ -1,0 +1,174 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1787101114,
+        "narHash": "sha256-gwrPcFf/rDjHPaVflbDZ040ZDmBTRj/7+s8ZmE2SaIM=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b18a4b905f8d028dc4476412e6d6891728695379",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1788881743,
+        "narHash": "sha256-2V9GZGvPfrNzxFozhI9dcqV+c3QdA8YZrvAAzqEB+dI=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "d6524aaca2ff07876657ae2b323f24be4874944b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_3": {
+      "locked": {
+        "lastModified": 1787101114,
+        "narHash": "sha256-gwrPcFf/rDjHPaVflbDZ040ZDmBTRj/7+s8ZmE2SaIM=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b18a4b905f8d028dc4476412e6d6891728695379",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_4": {
+      "locked": {
+        "lastModified": 1787101114,
+        "narHash": "sha256-gwrPcFf/rDjHPaVflbDZ040ZDmBTRj/7+s8ZmE2SaIM=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "b18a4b905f8d028dc4476412e6d6891728695379",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "qnap-kernel": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2",
+        "qnap8528": "qnap8528"
+      },
+      "locked": {
+        "lastModified": 1788975095,
+        "narHash": "sha256-a2Zf+nO0FtHbwusv4mYy016dWl0llwQKih5ui4ZXjAg=",
+        "owner": "allenmagic",
+        "repo": "qnap-kernel",
+        "rev": "e8d7e38c920a1f40014bd1197de3120a28169b66",
+        "type": "github"
+      },
+      "original": {
+        "owner": "allenmagic",
+        "repo": "qnap-kernel",
+        "type": "github"
+      }
+    },
+    "qnap8528": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_3"
+      },
+      "locked": {
+        "lastModified": 1787561567,
+        "narHash": "sha256-vaUb3WAif+Z1nHUNa784AyChjrT+CbrEj7sEBmbki1k=",
+        "owner": "allenmagic",
+        "repo": "qnap8528",
+        "rev": "b863b7af9677a1adb578b71950563de9a2c288fa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "allenmagic",
+        "repo": "qnap8528",
+        "type": "github"
+      }
+    },
+    "qnap8528_2": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_4"
+      },
+      "locked": {
+        "lastModified": 1787561567,
+        "narHash": "sha256-vaUb3WAif+Z1nHUNa784AyChjrT+CbrEj7sEBmbki1k=",
+        "owner": "allenmagic",
+        "repo": "qnap8528",
+        "rev": "b863b7af9677a1adb578b71950563de9a2c288fa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "allenmagic",
+        "repo": "qnap8528",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "qnap-kernel": "qnap-kernel",
+        "qnap8528": "qnap8528_2",
+        "sops-nix": "sops-nix",
+        "yunshu-container": "yunshu-container"
+      }
+    },
+    "sops-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786629091,
+        "narHash": "sha256-gkig4nPi1CWc4Z50GBsjE4ygSE7hMpl/TwID2an2Cck=",
+        "owner": "Mic92",
+        "repo": "sops-nix",
+        "rev": "a8627b21b9107c5711c96b84f32a9a4b3d45295f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Mic92",
+        "repo": "sops-nix",
+        "type": "github"
+      }
+    },
+    "yunshu-container": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789469697,
+        "narHash": "sha256-DW81wXI15Ti2LFbAhSh0U7pJh47rXcLs3xUo8dMiPaU=",
+        "ref": "refs/heads/main",
+        "rev": "959aed3e9c9a134d89da4b4144405e51f8daa4df",
+        "revCount": 37,
+        "type": "git",
+        "url": "file:///home/allenmagic/Projects/qnap-nas/yunshu-container"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:///home/allenmagic/Projects/qnap-nas/yunshu-container"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
