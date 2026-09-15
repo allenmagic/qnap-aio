@@ -6,9 +6,9 @@
   # 已落地：
   #   main-router.nix    主透明网关，VRRP MASTER，持浮动网关，跑 YunShu 策略分流
   #   side-router.nix    备份直连网关，VRRP BACKUP，兼降级态 DNS 转发
+  #   dnsmasq.nix        DHCP 服务器（全网唯一）+ 降级态 DNS 解析器
   #
   # 待落地：
-  #   dnsmasq.nix        DHCP 服务器（全网唯一）+ 降级态 DNS
   #   tailscale.nix      两个 tailscale 实例合一个容器（官方 + 自建 headscale）
   #   cloudflared.nix    内网隧道
   #
@@ -19,5 +19,6 @@
   imports = [
     ./main-router.nix
     ./side-router.nix
+    ./dnsmasq.nix
   ];
 }
