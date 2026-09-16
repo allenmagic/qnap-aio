@@ -155,11 +155,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789533249,
-        "narHash": "sha256-XjfuuulF05JUm6V0nbwMhsyNCjdSB5oQ2p6GGKU4I04=",
+        "lastModified": 1789537105,
+        "narHash": "sha256-rfhQA20gHdEbUdk++2QI/ANqtiEIB0moYUClQZgaCng=",
         "owner": "allenmagic",
         "repo": "yunshu-container",
-        "rev": "db6c6dd4b0bcd03a0956982c910147d96c0fccb6",
+        "rev": "727a82c61e08908d1b996a4945c6bc2f49d192e5",
         "type": "github"
       },
       "original": {

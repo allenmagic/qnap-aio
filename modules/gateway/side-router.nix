@@ -116,6 +116,7 @@ in
       networking.firewall = {
         filterForward = true;
         extraForwardRules = ''
+          tcp flags syn tcp option maxseg size set rt mtu   # 防 PMTUD 黑洞
           iifname "eth0" accept
         '';
         # 必须显式放行：VRRP 是 IP protocol 112，NixOS 防火墙的 input 链默认
