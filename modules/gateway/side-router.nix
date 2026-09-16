@@ -34,17 +34,19 @@ in
       system.stateVersion = "26.05"; # 与宿主机一致（yunshu 容器的默认 guestModule 用的是 26.11）
       networking.hostName = "side-router";
 
-      # MAC 固定。前缀用 10- 是为了排在 NixOS scripted 后端自动生成的
-      # 40-<接口名> 之前——udev 对同一接口只应用文件名最靠前的 .link。
-      systemd.network.links = {
-        "10-eth0" = {
-          matchConfig.Name = "eth0";
-          linkConfig.MACAddress = "02:00:00:02:00:21";
+      # macvlan 接口是 nspawn 在宿主 netns 建好再移进来的，容器内 udev 收不到
+      # 设备添加事件，.link 静默无效——必须用 oneshot 直接改
+      systemd.services.fix-mac-addresses = {
+        before = [ "network-pre.target" ];
+        wantedBy = [ "network-pre.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
         };
-        "10-eth1" = {
-          matchConfig.Name = "eth1";
-          linkConfig.MACAddress = "02:00:00:02:00:22";
-        };
+        script = ''
+          ${pkgs.iproute2}/bin/ip link set eth0 address 02:00:00:02:00:21
+          ${pkgs.iproute2}/bin/ip link set eth1 address 02:00:00:02:00:22
+        '';
       };
 
       boot.kernel.sysctl = {
