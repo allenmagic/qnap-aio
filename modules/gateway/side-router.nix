@@ -148,10 +148,7 @@ in
           interface = "eth0";
           virtualRouterId = vrid;
           priority = 90; # main-router 为 100
-          # ⚠️ 这里**不能**用 noPreempt：BACKUP 从不发送心跳，只有 MASTER 发；
-          # 一旦主节点因隧道故障降权（100-30=70），BACKUP 不开抢占就永远不会
-          # 接管，主节点也听不到更高优先级、不会主动让位——整条降级链路失效。
-          # QEMU 实测：主节点降到 70 后仍稳坐 MASTER，VIP 不漂移。
+          # 不能用 noPreempt：BACKUP 不发心跳，主节点降权时它不会接管（实测 VIP 不漂移）
           unicastSrcIp = lanIp;
           unicastPeers = [ mainRouterIp ];
           trackScripts = [ "chkWan" ];

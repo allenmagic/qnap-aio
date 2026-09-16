@@ -31,10 +31,7 @@ let
   credDir = "/run/credentials/@system";
 in
 {
-  # ⚠️ 不能用 systemd.tmpfiles：它在 sysinit 阶段执行，与 /srv/data 的挂载是
-  # 竞态（local-fs.target 也属于 sysinit）。跑早了目录就建在底层根文件系统上、
-  # 被挂载点遮住，容器启动报 "Failed to clone /srv/data/tailscale/headscale:
-  # No such file or directory"。QEMU 实测踩到过。
+  # 不用 tmpfiles：它在 sysinit 跑，与 /srv/data 挂载竞态，目录会被挂载点遮住
   systemd.services.tailscale-state-dirs = {
     description = "创建 tailscale 容器的状态目录（须晚于 /srv/data 挂载）";
     wantedBy = [ "multi-user.target" ];
