@@ -112,6 +112,20 @@ mkfs.btrfs -m raid1 -d raid1 -L data \
 
 无需记录任何 UUID——Btrfs 卷按卷标挂载，多设备成员由内核自动发现组装。
 
+**接着创建容器状态子卷**（⚠️ 必做，漏了会在首次启动时因 `/srv/state` 挂载失败
+而进 emergency mode）：
+
+```bash
+mkdir -p /mnt/data
+mount /dev/disk/by-label/data /mnt/data
+btrfs subvolume create /mnt/data/state
+umount /mnt/data
+```
+
+子卷挂在 `/srv/state`，专门放容器状态（tailscale 节点身份、dnsmasq 租约库）。
+用独立子卷是为了让状态**不在 NFS/Samba 导出范围内**——放 `/srv/data` 里的话，
+客户端能在共享里看到这些目录，只靠权限位挡着。
+
 ### 2.3 缓存盘与备份盘
 
 ```bash

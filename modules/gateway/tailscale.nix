@@ -18,7 +18,7 @@ let
   sideRouterIp = "192.168.10.3";
   mac = "02:00:00:02:00:41";
 
-  stateDir = "/srv/data/tailscale";
+  stateDir = "/srv/state/tailscale"; # data 卷的子卷，不在 NFS/Samba 导出内
   advertiseRoute = "192.168.10.0/24";
 
   # 沿用 router-image/network.env 里的设备名，保持 tailnet 里的身份连续

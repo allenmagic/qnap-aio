@@ -34,6 +34,16 @@
       options = [ "defaults" "noatime" ];
     };
 
+    # 容器状态：data 卷上的独立子卷，挂到导出范围之外的路径。
+    # 放 /srv/data 里会落在 NFS/Samba 共享中（只靠权限位挡），子卷则天然不在导出内。
+    # ⚠️ 子卷必须先手工创建，否则挂载失败 → 进 emergency mode：
+    #    sudo btrfs subvolume create /srv/data/state
+    "/srv/state" = {
+      device = lib.mkForce "/dev/disk/by-label/data";
+      fsType = lib.mkForce "btrfs";
+      options = [ "subvol=state" "noatime" ];
+    };
+
     # 缓存盘（1TB SSD）
     "/srv/cache" = {
       device = lib.mkForce "/dev/disk/by-label/cache";

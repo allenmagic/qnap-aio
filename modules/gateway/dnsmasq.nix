@@ -18,7 +18,7 @@ let
   vip = "192.168.10.1"; # DHCP 下发的网关与 DNS 都指它
   sideRouterIp = "192.168.10.3";
 
-  stateDir = "/srv/data/dnsmasq"; # 租约库：丢了不是"配置丢失"，是会把已发出的地址再发一遍
+  stateDir = "/srv/state/dnsmasq"; # data 卷的子卷，不在 NFS/Samba 导出内
   mac = "02:00:00:02:00:31";
 in
 {
