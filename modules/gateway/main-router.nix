@@ -28,14 +28,16 @@
     gateway = {
       floatIp = "192.168.10.1";
       vrrpId = 51;
-      priority = 100;        # side-router 为 90
+      # priority 80 < side 90：隧道没连时 main 不持 VIP，下游走 side 的直连+公网 DNS
+      # 隧道连上后 +30 = 110 > 90，main 抢回 VIP 走分流
+      priority = 80;
       authPass = "aio-vrrp"; # VRRPv2 认证字段只有 8 字节，别超长
       unicastSrcIp = "192.168.10.2";
       unicastPeers = [ "192.168.10.3" ]; # side-router
 
-      # 隧道不通时降权让出 VIP（100 - 30 = 70 < 90）。
+      # 启动期隧道没连时让出 VIP，避免 DNS DNAT 到 10.251.1.1 黑洞
       trackTunnel = true;
-      tunnelTrackWeight = -30;
+      tunnelTrackWeight = 30;
     };
 
     guestModule = { config, lib, ... }: {
