@@ -219,8 +219,8 @@ OOM 时连累 NAS 服务。必须给容器配 `MemoryMax` / `MemoryHigh`——�
    应对：给网关容器配 CPU 资源控制（`AllowedCPUs` / `CPUWeight`），默认不会有。
    注意这条**对今天的热路径本来就不成立**——yunshu 容器今天已经在共享核上跑。
 2. **generic XDP**：native XDP 每包一次程序执行，开销可忽略；但 generic XDP 是在
-   skb 路径上额外分配 + 拷贝，2.5G 线速下会明显掉速。r8169/RTL8125 的 native XDP
-   支持有限——**先确认驱动支持的模式，再决定做不做**（§14）。
+   skb 路径上额外分配 + 拷贝，2.5G 线速下会明显掉速。实机已确认网卡是 Intel igc，
+   驱动符号表含完整 XDP 实现（native，非 generic）——这一条不再是风险（§14）。
 3. **macvlan 单 TX 队列**：macvlan 子接口默认单队列（`IFF_NO_QUEUE`），物理口的
    RSS 多队列用不上。单核跑隧道加密时无所谓；若将来要上多核转发，
    veth（`numtxqueues`）+ bridge 更好扩展。当前不是问题。
@@ -887,9 +887,13 @@ br-*、宿主机侧 veth  -> 仅当 WAN 侧回退 veth+bridge（§15）时才存
 
 - **macvlan 兄弟之间的流量 XDP 看不见**。容器 ↔ 容器、容器 ↔ 宿主机 shim 的帧走内核
   内部软交换，不经过物理口。第一道防线只覆盖"从线上进来的"。
-- **落地方式本文没有给出**。NixOS 里声明式部署 XDP 需要自写程序 + systemd 加载，或
-  直接用现成的 `xdp-filter`/`xdp-tools`；TS-564 的网卡驱动（RTL8125/r8169）是否支持
-  native XDP 也要先确认。建议这一层排到最后做。
+- **落地方式见 [`firewall.md`](firewall.md)**：分层依据、XDP 程序骨架、挂载方式、
+  可观测性、分阶段顺序都在那里。实机已确认（2026-09-16）驱动 Intel igc 含完整 XDP
+  实现（native，非 generic），内核侧 `BPF_SYSCALL`/`BPF_JIT`/`XDP_SOCKETS`/
+  `DEBUG_INFO_BTF`/`NET_CLS_BPF` 全部就位——**不需要改内核**，这一层随时能做，
+  但仍建议排在最后。
+- **默认动作必须是 `PASS`，不是 `DROP`**：见上一条，宿主机看不见容器间流量，
+  做不了完整的 default deny。那个职责留在容器内。
 
 容器内 nftables 注意：
 
