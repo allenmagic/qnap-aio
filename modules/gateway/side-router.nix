@@ -98,13 +98,15 @@ in
 
       # 降级态 DNS：客户端问的是 VIP，VIP 在本容器上，所以由本容器把它们
       # 交给 dnsmasq-container。只对从 LAN 口进来的 53 生效。
+      # ⚠️ inet 表里必须写 `dnat ip to`：只写 `dnat to` 会报
+      #    "specify `dnat ip' or `dnat ip6' in inet table to disambiguate"
       networking.nftables.tables."side-dns" = {
         family = "inet";
         content = ''
           chain prerouting {
             type nat hook prerouting priority dstnat; policy accept;
-            iifname "eth0" udp dport 53 dnat to ${dnsmasqIp}:53
-            iifname "eth0" tcp dport 53 dnat to ${dnsmasqIp}:53
+            iifname "eth0" udp dport 53 dnat ip to ${dnsmasqIp}:53
+            iifname "eth0" tcp dport 53 dnat ip to ${dnsmasqIp}:53
           }
         '';
       };
@@ -146,8 +148,10 @@ in
           interface = "eth0";
           virtualRouterId = vrid;
           priority = 90; # main-router 为 100
-          # 不抢回：main 恢复后由它自己抢占，本容器退让，避免来回抖动
-          noPreempt = true;
+          # ⚠️ 这里**不能**用 noPreempt：BACKUP 从不发送心跳，只有 MASTER 发；
+          # 一旦主节点因隧道故障降权（100-30=70），BACKUP 不开抢占就永远不会
+          # 接管，主节点也听不到更高优先级、不会主动让位——整条降级链路失效。
+          # QEMU 实测：主节点降到 70 后仍稳坐 MASTER，VIP 不漂移。
           unicastSrcIp = lanIp;
           unicastPeers = [ mainRouterIp ];
           trackScripts = [ "chkWan" ];

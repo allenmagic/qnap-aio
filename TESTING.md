@@ -112,3 +112,17 @@ sudo nixos-container run dnsmasq -- cat /var/lib/dnsmasq/dnsmasq.leases
 
 **最不确定的一项**：容器内 macvlan 接口的 MAC 能否被 udev 的 `.link` 固定住。
 若不生效，退路是宿主侧 `ExecStartPost` 里 `nixos-container run ... ip link set`。
+
+## 构建卡住时先看这条
+
+`/root/build.log` 里若出现大量：
+
+```
+Operation too slow. Less than 1 bytes/sec transferred the last 300 seconds; retrying
+```
+
+那不是慢，是连接被掐死、正在重试，每次白等 5 分钟。实测外因是**局域网里有别的主机在跑
+BT 下载**——把 NAT 连接表/上行占满后，新连接就退化成这种僵死状态；关掉后下载速率立刻从
+0.2 MB/s 回到 ~2 MB/s。与测试环境本身无关。
+
+若反复僵死又找不到占用方，可试 `--option http-connections 1`（减少并发、单连接更稳）。

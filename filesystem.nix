@@ -1,6 +1,13 @@
 { config, lib, ... }:
 
 {
+  # 多设备 btrfs 必须显式声明。不声明时 udev 的 blkid 可能早于 btrfs 模块加载，
+  # /dev/disk/by-label/data 这个符号链接根本不生成 → /srv/data 挂载超时
+  # → local-fs.target 失败 → 直接进 emergency mode。QEMU 实测踩到过，
+  # 且属竞态（同一份配置有时能挂上、有时不能）。
+  boot.supportedFilesystems = [ "btrfs" ];
+  boot.kernelModules = [ "btrfs" ];
+
   # 数据盘使用 Btrfs 原生 RAID1（不用 mdadm）：数据带 checksum，
   # 定期 scrub 可检测并自动修复静默损坏；多设备由内核自动组装，无需 ARRAY 配置。
   #

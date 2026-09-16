@@ -22,10 +22,20 @@ let
   mac = "02:00:00:02:00:31";
 in
 {
-  # 容器状态的宿主目录（bindMount 的源必须存在，否则容器起不来）
-  systemd.tmpfiles.rules = [
-    "d ${stateDir} 0755 root root -"
-  ];
+  # 容器状态的宿主目录（bindMount 的源必须存在，否则容器起不来）。
+  # ⚠️ 不用 systemd.tmpfiles：它与 /srv/data 的挂载是竞态（都在 sysinit），
+  # 跑早了目录会被挂载点遮住，容器报 "Failed to clone ...: No such file or directory"。
+  systemd.services.dnsmasq-state-dir = {
+    description = "创建 dnsmasq 容器的租约目录（须晚于 /srv/data 挂载）";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "container@dnsmasq.service" ];
+    requiredBy = [ "container@dnsmasq.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = "install -d -m 755 ${stateDir}";
+  };
 
   containers.dnsmasq = {
     autoStart = true;
