@@ -118,6 +118,7 @@ in
         extraForwardRules = ''
           tcp flags syn tcp option maxseg size set rt mtu   # 防 PMTUD 黑洞
           iifname "eth0" accept
+          limit rate 10/minute log prefix "FORWARD_DROP: " drop
         '';
         # 必须显式放行：VRRP 是 IP protocol 112，NixOS 防火墙的 input 链默认
         # drop 且不会为它生成规则。同机双容器场景下尤其致命——两个 macvlan
