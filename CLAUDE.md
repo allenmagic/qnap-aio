@@ -116,7 +116,7 @@ sops secrets/secrets.yaml                         # 编辑加密密钥（需要 
 
 ### 与 `yunshu-container` 仓库的关系
 
-main-router 由独立的 `yunshu-container` 仓库（公开，`github:allenmagic/yunshu-container`）提供，
+main-router 由独立的 `yunshu-container` 仓库（公开，`git+https://github.com/allenmagic/yunshu-container`——不要用 `github:` 简写，它走 tarball 下载，国内会被截断）提供，
 它只做一件事：**macvlan 接入的 YunShu 透明网关容器**。它已独立维护、不跟随上游 `yunshu-nix`。
 
 **改它的纪律**：输入是 `github:`，所以改动**必须 commit 且 push**，否则本仓库求值拉到的仍是

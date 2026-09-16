@@ -25,7 +25,7 @@
     # 代价是**任何改动都必须 commit 并且 push**，否则别处拉到的还是旧版本
     # ——本机开发时这一点尤其容易忘，报错还常常是指向不明的"option 不存在"。
     yunshu-container = {
-      url = "github:allenmagic/yunshu-container";
+      url = "git+https://github.com/allenmagic/yunshu-container";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

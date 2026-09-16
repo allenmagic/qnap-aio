@@ -157,15 +157,15 @@
       "locked": {
         "lastModified": 1789538376,
         "narHash": "sha256-81jCiQCDXrA79BLM3gG+WcVTlmOh/U5+0FbEJjwGe0k=",
-        "owner": "allenmagic",
-        "repo": "yunshu-container",
+        "ref": "refs/heads/main",
         "rev": "085392b428a9bb2c6e12b9ec71af5aff6d5cb979",
-        "type": "github"
+        "revCount": 4,
+        "type": "git",
+        "url": "https://github.com/allenmagic/yunshu-container"
       },
       "original": {
-        "owner": "allenmagic",
-        "repo": "yunshu-container",
-        "type": "github"
+        "type": "git",
+        "url": "https://github.com/allenmagic/yunshu-container"
       }
     }
   },
