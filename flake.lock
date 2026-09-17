@@ -70,11 +70,11 @@
         "qnap8528": "qnap8528"
       },
       "locked": {
-        "lastModified": 1789472185,
-        "narHash": "sha256-BX5LfA44m8EnP/qpP7REnMFNfYYEO4G9jym7orcutis=",
+        "lastModified": 1789650522,
+        "narHash": "sha256-COKieWZfo3mi/b5Bwl48EC1dzNus4t5a7Azj318ZF/E=",
         "owner": "allenmagic",
         "repo": "qnap-kernel",
-        "rev": "bbb6148d0fa51fca80146d0f0df189910c2e7d16",
+        "rev": "346f434bfb59c74c96a3c125efcb6909fd9387d6",
         "type": "github"
       },
       "original": {
