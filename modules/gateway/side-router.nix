@@ -99,7 +99,8 @@ in
       };
 
       # 降级态 DNS：客户端问的是 VIP，VIP 在本容器上，所以由本容器把它们
-      # 交给 dnsmasq-container。只对从 LAN 口进来的 53 生效。
+      # 交给 dnsmasq-container。只对从 LAN 口进来、且目的地址是 VIP 的 53 生效。
+      # ⚠️ 目的地址限定不能省：dnsmasq 的上游查询也从 eth0 进来，一并改写就绕回它自己成环。
       # ⚠️ inet 表里必须写 `dnat ip to`：只写 `dnat to` 会报
       #    "specify `dnat ip' or `dnat ip6' in inet table to disambiguate"
       networking.nftables.tables."side-dns" = {
@@ -107,8 +108,8 @@ in
         content = ''
           chain prerouting {
             type nat hook prerouting priority dstnat; policy accept;
-            iifname "eth0" udp dport 53 dnat ip to ${dnsmasqIp}:53
-            iifname "eth0" tcp dport 53 dnat ip to ${dnsmasqIp}:53
+            iifname "eth0" ip daddr ${vip} udp dport 53 dnat ip to ${dnsmasqIp}:53
+            iifname "eth0" ip daddr ${vip} tcp dport 53 dnat ip to ${dnsmasqIp}:53
           }
         '';
       };
