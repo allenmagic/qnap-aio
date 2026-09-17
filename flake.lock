@@ -155,11 +155,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789572921,
-        "narHash": "sha256-EMmGuUwrlp9Hka6qiF4hYH72zeY+LRsL2uZy/pZFdIE=",
+        "lastModified": 1789654004,
+        "narHash": "sha256-J3yEvtIwkd5xjOs30ciG6qieuxaPYbXrLtIsO/jMsVM=",
         "ref": "refs/heads/main",
-        "rev": "115dd54b3f46473d744e777faa34aef241b8031f",
-        "revCount": 5,
+        "rev": "e6438607c5fdfad6fc8dde0abc0812e38699c0a6",
+        "revCount": 7,
         "type": "git",
         "url": "https://github.com/allenmagic/yunshu-container"
       },
