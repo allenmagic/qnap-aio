@@ -8,9 +8,14 @@ QNAP TS-564 的 NixOS 一体化网关宿主：**纯二层宿主机 + 一组 syst
 主机配置直接在仓库根目录，flake 只输出 `nixosConfigurations.default`。设计取舍与验收依据见
 [`docs/gateway.md`](docs/gateway.md)（含实测的性能/资源对比与编址迁移清单）。
 
-> **⚠️ 本配置尚未在任何机器上部署过。** 从 `qnap-nixos-nas` 复制而来并完成了架构改造，
-> 但迁移（编址、接口改名、从 MicroVM 切换）尚未在真机执行，也**没做过任何真机验证**。
-> 首次部署前务必先读 `docs/gateway.md` 附录 A 与 §7.4（失败域）。
+> **⚠️ 2026-09-17：已从「双路由 + VRRP 浮动网关」改为单网关。** `side-router` 已删除，
+> 网关（main-router）静态持有 `.1`，不再有 VIP 漂移与 keepalived。改这一刀的原因是
+> 「用隧道健康度驱动 VIP 漂移」本身是故障源：实测两台 keepalived 启动差 20+ 秒，
+> 期间抢到 VIP 的那台若隧道没连上，它的 DNS DNAT 会指向不存在的 `10.251.1.1`，
+> 全网 DNS 黑洞。降级职责改由 `yunshu-dns-target` 在同一个容器内换 DNAT 目标承担。
+>
+> **`docs/gateway.md` 里 §7（VRRP/浮动网关）、§7.3/§7.4、附录 A 的编址部分已过时**，
+> 只作历史参考，尚未重写。
 
 ## 常用命令
 
@@ -49,7 +54,7 @@ sops secrets/secrets.yaml                         # 编辑加密密钥（需要 
 
 | 名字 | MAC | 位置 | 给谁 |
 |---|---|---|---|
-| `wan0` | `24:5e:be:88:1e:79` | 原 `enp2s0` | main-router / side-router 的 WAN 侧 macvlan |
+| `wan0` | `24:5e:be:88:1e:79` | 原 `enp2s0` | main-router 的 WAN 侧 macvlan |
 | `lan0` | `24:5e:be:88:1e:78` | 原 `enp3s0` | 所有容器的 LAN 侧 macvlan + 宿主机 shim |
 
 - 用 `MACAddress` 而非 `PermanentMACAddress` 匹配：这对网卡在当前内核上不暴露 `perm_address`。
@@ -57,48 +62,52 @@ sops secrets/secrets.yaml                         # 编辑加密密钥（需要 
 - ⚠️ 防火墙按**接口名**匹配：宿主机地址从 `br-lan` 挪到 `mv-shim` 时 `modules/network/default.nix`
   那张端口表必须同时改。漏改不报错，只会让 Samba/NFS/Syncthing 静默被挡在门外。
 
-**宿主机只保留一个 macvlan shim**（`mv-shim` on `lan0`，`mode=bridge`，`192.168.10.250/24`）。
+**宿主机只保留一个 macvlan shim**（`mv-shim` on `lan0`，`mode=bridge`，`192.168.10.2/24`）。
 "宿主机纯二层"的准确含义是**不做转发**，不是"没有三层"——它必须有地址、默认路由和 DNS，
-否则 flake update / sops 解密 / NTP 对时全都做不了。默认路由与 DNS 都指向浮动网关 `.1`。
+否则 flake update / sops 解密 / NTP 对时全都做不了。默认路由与 DNS 都指向网关 `.1`。
 
 **编址**（详见 `docs/gateway.md` §3）：
 
 | 角色 | 地址 | 说明 |
 |---|---|---|
-| 浮动网关 VIP | `192.168.10.1` | 下游设备的默认网关与 DNS，随 VRRP 漂移 |
-| main-router | `.2` | VRRP MASTER |
-| side-router | `.3` | VRRP BACKUP |
+| 网关 | `192.168.10.1` | main-router 的 LAN 地址；下游设备的默认网关与 DNS |
+| 宿主机 | `.2` | macvlan shim（与旧系统同址，SSH/脚本不用改） |
 | tailscale | `.4` | 两个 tailscale 实例 |
 | cloudflared | `.6` | 隧道 |
 | dnsmasq | `.7` | DHCP + 降级态 DNS |
-| 宿主机 | `.250` | macvlan shim |
+
+> `.3` 已释放：原 side-router 已删除，网关不再做 VRRP 漂移。
 
 ### 网关容器组（`modules/gateway/`）
 
 | 文件 | 容器 | 接法 | 要点 |
 |---|---|---|---|
-| `main-router.nix` | main-router | `lan0:eth0` + `wan0:eth1` | 由 `yunshu-container` 的 container 模块构建；VRRP MASTER（priority 100），YunShu 策略分流 |
-| `side-router.nix` | side-router | `lan0:eth0` + `wan0:eth1` | 普通 NixOS 容器；VRRP BACKUP（priority 90，`noPreempt`），降级直连 NAT，兼降级态 DNS 转发 |
+| `main-router.nix` | main-router | `lan0:eth0` + `wan0:eth1` | 由 `yunshu-container` 的 container 模块构建；**唯一网关**，静态持 `.1`，YunShu 策略分流 |
 | `dnsmasq.nix` | dnsmasq | `lan0:eth0` | 全网唯一 DHCP；**option 3/6 都下发 VIP** |
 | `tailscale.nix` | tailscale | `lan0:eth0` | 官方实例走 `services.tailscale`，headscale 实例手写单元（NixOS 不支持多实例） |
 | `cloudflared.nix` | cloudflared | `lan0:eth0` | token 模式，`services.cloudflared` 不支持所以手写 |
 
 **几条容易改错、且改了不会立刻报错的地方：**
 
-- **VRRP 参数必须两边一致**：`vrid=51` / `auth_pass=aio-vrrp`（≤8 字节，VRRPv2 认证字段限制）/
-  VIP `.1` / 单播互指。改完用一次 eval 交叉验证，别靠肉眼比对两个文件。
+- **网关地址只在 `yunshu.container.gateway.address` 写一次**：模块据此同时设置
+  LAN 接口地址与 DNS 重定向规则。别在 `guestModule` 里再写一份
+  `networking.interfaces.eth0.ipv4.addresses`——两处不一致时 DNS 会静默失效。
 - **macvlan 的容器内接口名必须显式指定**：写 `macvlans = [ "lan0:eth0" ]`，冒号后半段不能省。
-  省了 nspawn 会命名成 `mv-lan0`，与 keepalived/DNS 里的 `eth0` 对不上且**不报错**
+  省了 nspawn 会命名成 `mv-lan0`，与 DNS 透明重定向里写的 `eth0` 对不上且**不报错**
   （yunshu-container 里有断言挡这个）。
 - **MAC 必须逐个固定**（`02:00:00:02:00:XX`，按容器编号排）。nspawn 每次重建都随机生成，
   漂了的后果是 DHCP 租约变化、上游按 MAC 绑定失效、VRRP 对端认成本新设备。
   容器内用 `systemd.network.links`（**不是** `.network`——那个只有 networkd 会读，容器不开 networkd），
   文件名前缀 `10-` 是为了排在 NixOS 自动生成的 `40-<接口名>` 之前（udev 只应用最靠前的那个）。
-- **DNS 链路不要"顺手优化"**：客户端 DNS 由 DHCP 下发为 VIP → main 持 VIP 时由 YunShu 隧道 DNS
-  做分流，漂到 side 时由 side 把 53 转发给 dnsmasq。一旦把客户端 DNS 改成某个容器的固定地址，
-  fake-IP 不再触发，域名级分流直接失效（AdGuard 方案就是因此被废弃的）。
-- **side-router 的 WAN 健康检查权重是 `-100`**：keepalived 在"优先级+权重 < 1"时进 FAULT，
-  这样 WAN 不通时它**永远不会**接管 VIP。只降一点权重的话，它会带着一个上不了网的网关接管。
+- **DNS 链路不要"顺手优化"**：客户端 DNS 由 DHCP 下发为网关 `.1`，main-router 再按 tun0
+  有无决定把 53 劫持到「YunShu 隧道 DNS」还是「dnsmasq `.7`」。一旦把客户端 DNS 改成某个
+  容器的固定地址，fake-IP 不再触发，域名级分流直接失效（AdGuard 方案就是因此被废弃的）。
+- **降级切换是原子的**：`yunshu-container/modules/dns.nix` 的 `yunshu-dns-target` 每 3 秒
+  看一次 tun0，把 flush + add 写在同一个 `nft -f` 里。拆成两条 nft 命令写就会有一个
+  客户端 DNS 黑洞的间隙。
+- **tailscale / cloudflared 靠 resolv.conf 保持直连**：它们的默认网关是 `.1`，但
+  `/etc/resolv.conf` 写死公网 DNS，拿不到 fake-IP 就不会被 YunShu 分流。改它们的
+  resolv.conf 等于把它们塞进隧道。
 
 ### 宿主机服务与密钥
 
@@ -135,9 +144,10 @@ GitHub 上的旧版本——而报错常常是"option 不存在"这种指向不�
 4. 数据盘为 Btrfs 原生 RAID1（无 mdadm）：`mkfs.btrfs -m raid1 -d raid1 -L data`，挂载靠卷标，
    多设备由内核自动组装。
 5. `modules/security/sops.nix` 的 `defaultSopsFile` 是相对路径——移动该文件时同步改。
-6. **改造遗留的未验证项**（真机首次部署前必须逐条验证，详见 `docs/gateway.md` §17）：
-   macvlan 接口的 MAC 能否靠容器内 udev `.link` 固定、两个容器的单播 VRRP 是否真能互通、
-   dnsmasq 能否收到广播 DHCP 请求、WAN 侧上游是否接受第二个 DHCP 客户端。
+6. **真机已实测确认的项**（2026-09-17，见 `docs/gateway.md` §17）：macvlan 接口能正常收发、
+   dnsmasq 收得到广播 DHCP 请求、WAN 侧上游接受多个 DHCP 客户端。
+   **仍未验证**：隧道连上后 `yunshu-dns-target` 切到 `10.251.1.1` 时，fake-IP 分流是否
+   真的生效（此前几次部署 YunShu 都是未登录状态，走的都是降级路径）。
 
 ## 代码风格
 

@@ -9,7 +9,7 @@ let
   aria2Dir = "${downloadRoot}/aria2";
   videoDir = "${downloadRoot}/video";
 
-  lanIp = "192.168.10.250";
+  lanIp = "192.168.10.2";
 
   # qBittorrent 的 serverConfig 会经 nix store 落盘（全员可读），不能放密码。
   # 这里放占位符，启动前由下面的 ExecStartPre 用 sops 里的明文算 PBKDF2 覆盖。

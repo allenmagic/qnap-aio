@@ -1,6 +1,6 @@
-# main-router —— 主透明网关（VRRP MASTER，持有浮动网关 192.168.10.1）
+# main-router —— 唯一网关（YunShu 策略分流，隧道不可用时降级直连）
 # 接入：macvlan 直连两个物理口，容器自己就是网关（自己做 NAT、自己从 WAN 要 DHCP）
-#   lan0 ──> eth0   192.168.10.2/24   LAN（VRRP 实例绑在这个口上）
+#   lan0 ──> eth0   192.168.10.1/24   LAN（下游的网关与 DNS 都指它）
 #   wan0 ──> eth1   DHCP              WAN
 # lan0/wan0 是宿主侧按 MAC 锚定的名字（modules/network/links.nix）
 
@@ -26,28 +26,14 @@
     };
 
     gateway = {
-      floatIp = "192.168.10.1";
-      vrrpId = 51;
-      # priority 80 < side 90：隧道没连时 main 不持 VIP，下游走 side 的直连+公网 DNS
-      # 隧道连上后 +30 = 110 > 90，main 抢回 VIP 走分流
-      priority = 80;
-      authPass = "aio-vrrp"; # VRRPv2 认证字段只有 8 字节，别超长
-      unicastSrcIp = "192.168.10.2";
-      unicastPeers = [ "192.168.10.3" ]; # side-router
-
-      # 启动期隧道没连时让出 VIP，避免 DNS DNAT 到 10.251.1.1 黑洞
-      trackTunnel = true;
-      tunnelTrackWeight = 30;
+      address = "192.168.10.1";
+      # 隧道没连上时把客户端 DNS 转给 dnsmasq（.7），而不是让它黑洞。
+      # 这是"网关只有一台"之后唯一的降级逻辑，由 yunshu-dns-target 按 tun0 有无切换。
+      dnsFallback = "192.168.10.7";
     };
 
     guestModule = { config, lib, ... }: {
       networking = {
-        interfaces.eth0.ipv4.addresses = [
-          {
-            address = "192.168.10.2";
-            prefixLength = 24;
-          }
-        ];
         interfaces.eth1.useDHCP = true;
 
         # /etc/resolv.conf 由下面写死，禁止 dhcpcd 去写它：那是 NixOS 管理的

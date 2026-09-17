@@ -15,7 +15,7 @@
 
 let
   lanIp = "192.168.10.4";
-  sideRouterIp = "192.168.10.3";
+  gatewayIp = "192.168.10.1";
   mac = "02:00:00:02:00:41";
 
   stateDir = "/srv/state/tailscale"; # data 卷的子卷，不在 NFS/Samba 导出内
@@ -87,7 +87,7 @@ in
           }
         ];
         defaultGateway = {
-          address = sideRouterIp;
+          address = gatewayIp;
           interface = "eth0";
         };
         resolvconf.enable = false;

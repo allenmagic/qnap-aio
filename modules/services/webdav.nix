@@ -3,7 +3,7 @@
 {
   # WebDAV 文件服务（hacdias/webdav）：给 iOS「文件」App、Infuse、RaiDrive、
   # rclone 等 WebDAV 客户端提供 /srv/data/webdav 的读写入口。
-  # 公网访问经cloudflared 容器隧道回源到 192.168.10.250:4918，
+  # 公网访问经cloudflared 容器隧道回源到 192.168.10.2:4918，
   # 隧道 ingress 在 Cloudflare Zero Trust 面板配置（见 README）。
   services.webdav = {
     enable = true;
@@ -18,7 +18,7 @@
     environmentFile = config.sops.secrets.webdav-password.path;
 
     settings = {
-      address = "192.168.10.250"; # 只绑内网 shim（mv-shim）
+      address = "192.168.10.2"; # 只绑内网 shim（mv-shim）
       port = 4918;              # RFC 4918 的 WebDAV 惯用端口
       directory = "/srv/data/webdav";
       permissions = "CRUD";     # 读写（C/R/U/D），级联给下面的用户

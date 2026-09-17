@@ -2,21 +2,19 @@
 #
 #   lan0 ──> eth0   192.168.10.7/24   LAN（单口，不需要 WAN）
 #
-# 两个职责都**不随 VIP 漂移**，所以放在固定地址的独立容器上：
-#   - DHCP 应答走广播，不需要持有 VIP；
-#   - 客户端 DNS 由 DHCP 下发为 VIP（见 docs/gateway.md §6.7），VIP 在
-#     main-router 时由 YunShu 隧道 DNS 接管做分流，漂到 side-router 时由它把
-#     53 转到这里——所以本容器只在降级态真正被用到。
+# 两个职责都**不随隧道状态变化**，所以放在固定地址的独立容器上：
+#   - DHCP 应答走广播；
+#   - 客户端 DNS 由 DHCP 下发为网关地址 .1（见 docs/gateway.md §6.7）。隧道可用时
+#     main-router 把 53 劫持到 YunShu 隧道 DNS 做分流；隧道不可用时按同一条规则
+#     转到这里——所以本容器只在**降级态**真正被查询。
 #
-# 出站默认网关指向 side-router（.3）而不是 VIP：它的上游 DNS 查询必须走直连，
-# 不能被当成"该走代理的流量"。副作用是它依赖 side-router，但两者本来就在
-# 同一场景下成对出现（side 接管 VIP 时本容器才被使用），不引入新的故障面。
+# 出站默认网关指向 main-router（.1）。它的上游查询发往公网 DNS，目的地址不是 .1，
+# 不会被那条 DNS 劫持规则命中，因此不走隧道、保持直连。
 { config, lib, pkgs, ... }:
 
 let
   lanIp = "192.168.10.7";
-  vip = "192.168.10.1"; # DHCP 下发的网关与 DNS 都指它
-  sideRouterIp = "192.168.10.3";
+  gatewayIp = "192.168.10.1";
 
   stateDir = "/srv/state/dnsmasq"; # data 卷的子卷，不在 NFS/Samba 导出内
   mac = "02:00:00:02:00:31";
@@ -65,7 +63,7 @@ in
           }
         ];
         defaultGateway = {
-          address = sideRouterIp;
+          address = gatewayIp;
           interface = "eth0";
         };
 
@@ -74,7 +72,7 @@ in
         resolvconf.enable = false;
 
         firewall = {
-          # 53 给 side-router 转过来的降级态查询；67 是 DHCP 服务端
+          # 53 给 main-router 降级时转过来的查询；67 是 DHCP 服务端
           # （NixOS 不会因为启用 dnsmasq 就自动放行，不写这条 DHCP 直接被丢）。
           allowedTCPPorts = [ 53 ];
           allowedUDPPorts = [
@@ -106,12 +104,12 @@ in
 
           dhcp-authoritative = true;
           dhcp-range = [ "eth0,192.168.10.100,192.168.10.200,255.255.255.0,12h" ];
-          # 3 = 默认网关，6 = DNS，两者都必须是 VIP。
-          # 写死成某个容器的固定地址就等于放弃分流：DNS 绕开 VIP 后
-          # YunShu 的 fake-IP 不会触发，被墙域名拿不到代理路径。
+          # 3 = 默认网关，6 = DNS，两者都必须是网关地址（main-router 的 .1）。
+          # 写成别的容器的固定地址就等于放弃分流：DNS 绕开 .1 后不会被
+          # main-router 劫持到隧道 DNS，fake-IP 不触发，被墙域名拿不到代理路径。
           dhcp-option = [
-            "eth0,3,${vip}"
-            "eth0,6,${vip}"
+            "eth0,3,${gatewayIp}"
+            "eth0,6,${gatewayIp}"
             "eth0,28,192.168.10.0/24"
           ];
 

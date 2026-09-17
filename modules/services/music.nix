@@ -67,7 +67,7 @@ in
       cache-path = "/var/cache/gonic";
 
       # 沿用 Navidrome 的地址与端口，客户端与防火墙均无需改动
-      listen-addr = "192.168.10.250:4533";
+      listen-addr = "192.168.10.2:4533";
 
       # 扫描：等价于原 Navidrome 的 ScanSchedule = "@every 1h"
       # （注意 gonic 的 scan-interval 单位是分钟，不是 "@every" 时长字符串）

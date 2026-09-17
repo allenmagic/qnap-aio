@@ -27,7 +27,7 @@
       DataFolder = "/var/lib/navidrome";
 
       # 网络配置
-      Address = "192.168.10.250";
+      Address = "192.168.10.2";
       Port = 4533;
 
       # 日志级别

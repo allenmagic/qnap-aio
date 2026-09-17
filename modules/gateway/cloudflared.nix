@@ -5,12 +5,13 @@
 # token 模式（ingress 在 Cloudflare 面板管理），因此不用 NixOS 的
 # services.cloudflared——那个模块只支持 credentials-file + 本地 ingress 配置。
 #
-# 出站直连：默认网关指向 side-router，不经商业 main（见 docs/gateway.md §6.4）。
+# 出站走默认网关 main-router；它的 resolv.conf 是公网 DNS，拿不到 fake-IP，
+# 因此不会被 YunShu 分流（见 docs/gateway.md §6.4）。
 { config, lib, pkgs, ... }:
 
 let
   lanIp = "192.168.10.6";
-  sideRouterIp = "192.168.10.3";
+  gatewayIp = "192.168.10.1";
   mac = "02:00:00:02:00:51";
 
   credDir = "/run/credentials/@system";
@@ -43,7 +44,7 @@ in
           }
         ];
         defaultGateway = {
-          address = sideRouterIp;
+          address = gatewayIp;
           interface = "eth0";
         };
         resolvconf.enable = false;

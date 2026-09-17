@@ -2,14 +2,14 @@
 
 {
   # Glance 仪表盘（glanceapp/glance）：起始页，bookmarks 汇总本机各 Web 服务入口。
-  # 公网访问经cloudflared 容器隧道回源到 192.168.10.250:8080，
+  # 公网访问经cloudflared 容器隧道回源到 192.168.10.2:8080，
   # 隧道 ingress 在 Cloudflare Zero Trust 面板配置（见 README）。
   services.glance = {
     enable = true;
 
     settings = {
       server = {
-        host = "192.168.10.250"; # 只绑内网 shim（mv-shim）
+        host = "192.168.10.2"; # 只绑内网 shim（mv-shim）
         port = 8080;
         # 经 cloudflared 回源：按 X-Forwarded-For 认客户端 IP。Glance 自带的
         # 暴力破解防护（5 次失败封 IP 5 分钟）依赖它，不加则所有请求同源。
@@ -54,16 +54,16 @@
                   sites = [
                     # 内网地址：Glance 自身走公网访问时这些链接点不开，
                     # 需要时再补一组走 Cloudflare 子域名的「公网」链接。
-                    { title = "Glance"; url = "http://192.168.10.250:8080"; icon = "sh:glance"; alt-status-codes = [ 302 303 ]; }
-                    { title = "qBittorrent"; url = "http://192.168.10.250:8081"; icon = "si:qbittorrent"; }
-                    { title = "AriaNg"; url = "http://192.168.10.250:6880"; icon = "sh:aria2"; }
+                    { title = "Glance"; url = "http://192.168.10.2:8080"; icon = "sh:glance"; alt-status-codes = [ 302 303 ]; }
+                    { title = "qBittorrent"; url = "http://192.168.10.2:8081"; icon = "si:qbittorrent"; }
+                    { title = "AriaNg"; url = "http://192.168.10.2:6880"; icon = "sh:aria2"; }
                     # OpenList 没有自己的 simple-icons 图标（404），借用同源的 alist
-                    { title = "OpenList"; url = "http://192.168.10.250:5244"; icon = "si:alist"; }
-                    { title = "Feishin"; url = "http://192.168.10.250:9180"; icon = "si:musicbrainz"; }
-                    { title = "Navidrome"; url = "http://192.168.10.250:4533"; icon = "mdi:music-circle"; alt-status-codes = [ 302 303 ]; }
-                    { title = "Syncthing"; url = "http://192.168.10.250:8384"; icon = "si:syncthing"; }
-                    { title = "Beszel"; url = "http://192.168.10.250:8090"; icon = "sh:beszel"; }
-                    { title = "WebDAV"; url = "http://192.168.10.250:4918"; icon = "mdi:folder-network"; alt-status-codes = [ 401 ]; }
+                    { title = "OpenList"; url = "http://192.168.10.2:5244"; icon = "si:alist"; }
+                    { title = "Feishin"; url = "http://192.168.10.2:9180"; icon = "si:musicbrainz"; }
+                    { title = "Navidrome"; url = "http://192.168.10.2:4533"; icon = "mdi:music-circle"; alt-status-codes = [ 302 303 ]; }
+                    { title = "Syncthing"; url = "http://192.168.10.2:8384"; icon = "si:syncthing"; }
+                    { title = "Beszel"; url = "http://192.168.10.2:8090"; icon = "sh:beszel"; }
+                    { title = "WebDAV"; url = "http://192.168.10.2:4918"; icon = "mdi:folder-network"; alt-status-codes = [ 401 ]; }
                   ];
                 }
                 # 盯网关仓库的 CI 发布：出新版本时该在 NAS 上跑 nix flake update。

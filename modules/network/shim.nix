@@ -13,7 +13,7 @@
     };
 
     networks = {
-      # lan0：只作为父接口，本身不配 IP，三层归 main-router / side-router 容器
+      # lan0：只作为父接口，本身不配 IP，三层归 main-router 容器
       "20-lan0" = {
         matchConfig.Name = "lan0";
         networkConfig = {
@@ -38,9 +38,8 @@
       "30-mv-shim" = {
         matchConfig.Name = "mv-shim";
         networkConfig = {
-          Address = "192.168.10.250/24";
-          # 默认路由走浮动网关：与下游设备同一出口，随 VRRP 漂移。
-          # 真要一个不受漂移影响的稳定出口，把它指向 side-router（.3）。
+          Address = "192.168.10.2/24";
+          # 默认路由走网关 .1（main-router）：与下游设备同一出口。
           Gateway = "192.168.10.1";
           DNS = [ "192.168.10.1" ];
           LinkLocalAddressing = "no";
