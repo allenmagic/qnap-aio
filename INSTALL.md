@@ -205,7 +205,7 @@ reboot
 - **方案 A（推荐）**：笔记本网线接到 QNAP 的**内网口**，手动设置静态 IP `192.168.10.100/24`，然后：
 
   ```bash
-  ssh nas@192.168.10.250    # 用第 3.3 步配置的密钥
+  ssh nas@192.168.10.2    # 用第 3.3 步配置的密钥
   ```
 
 - **方案 B**：HDMI 接显示器 + USB 键盘，控制台用 root 登录（第 3.4 步设的密码）。控制台已启用 kmscon + Noto Sans CJK 字体（`modules/system/console.nix`），可正常显示中文；若开机后 TTY 无显示，说明 i915 DRM 初始化异常，排查 `journalctl -u kmsconvt@tty1`。
@@ -254,7 +254,7 @@ sudo reboot
 ip -br link
 
 # 宿主机自己的地址与路由
-ip -br addr show mv-shim                   # 应有 192.168.10.250/24
+ip -br addr show mv-shim                   # 应有 192.168.10.2/24
 ip route                                   # 默认路由应指向 192.168.10.1
 
 # 五个容器都起来了
@@ -336,7 +336,7 @@ sudo nixos-container run side-router -- nft list ruleset | grep -A3 prerouting
 ```bash
 ip a                       # 应拿到 192.168.10.100-200，网关 192.168.10.1，DNS 192.168.10.1
 ping -c 3 8.8.8.8          # 外网连通（经 main-router 的 NAT/分流）
-ping -c 3 192.168.10.250   # 内网到 NAS 连通
+ping -c 3 192.168.10.2   # 内网到 NAS 连通
 ```
 
 > 测 DNS 分流前先 `systemctl stop nscd`：宿主机与容器都跑 nscd，
@@ -347,7 +347,7 @@ ping -c 3 192.168.10.250   # 内网到 NAS 连通
 
 ## 7. 收尾
 
-1. 浏览器访问 **http://192.168.10.250:8080**，用 `nas` 登录 Glance 仪表盘
+1. 浏览器访问 **http://192.168.10.2:8080**，用 `nas` 登录 Glance 仪表盘
    （系统没有 Cockpit，Web 管理走它；其余用 SSH）
 
 > ⚠️ **必须逐条验证的真机项**（这些在开发机上无法验证，只能上机确认）：
@@ -360,13 +360,13 @@ ping -c 3 192.168.10.250   # 内网到 NAS 连通
 ## 8. 验收清单
 
 - [ ] 重启 NAS 后 Btrfs RAID1 数据卷自动挂载（`btrfs filesystem show` 显示两个成员）
-- [ ] 接口名已是 `wan0`/`lan0`（不再是 `enp2s0`/`enp3s0`），且 `mv-shim` 有 `192.168.10.250/24`
+- [ ] 接口名已是 `wan0`/`lan0`（不再是 `enp2s0`/`enp3s0`），且 `mv-shim` 有 `192.168.10.2/24`
 - [ ] 五个容器全部 running（`systemctl list-units 'container@*'`）
 - [ ] 浮动网关 `.1` 在 main-router 的 eth0 上；停掉它之后漂移到 side-router
 - [ ] 下游客户端自动获取 DHCP 地址，网关与 DNS 都是 `.1`
 - [ ] 被墙域名走隧道、境内直连（分流生效；测之前先 `systemctl stop nscd`）
-- [ ] Samba 共享可挂载（`\\192.168.10.250\data`，用户名 nas）
-- [ ] NFS 共享可挂载（`mount -t nfs -o vers=4.2 192.168.10.250:/ /mnt`，应看到 data/cache/backup 三个目录）
+- [ ] Samba 共享可挂载（`\\192.168.10.2\data`，用户名 nas）
+- [ ] NFS 共享可挂载（`mount -t nfs -o vers=4.2 192.168.10.2:/ /mnt`，应看到 data/cache/backup 三个目录）
 - [ ] Syncthing(8384)、Navidrome(4533)、Feishin(9180)、Glance(8080) 端口可达
 - [ ] 宿主 `sensors` 有风扇/温度读数，qnap8528 模块已加载
 
@@ -380,7 +380,7 @@ ping -c 3 192.168.10.250   # 内网到 NAS 连通
 | tailscale 容器 | 192.168.10.4 |
 | cloudflared 容器 | 192.168.10.6 |
 | dnsmasq 容器 | 192.168.10.7 |
-| NAS 宿主机 | 192.168.10.250（mv-shim） |
+| NAS 宿主机 | 192.168.10.2（mv-shim） |
 | DHCP 池 | 192.168.10.100 - 192.168.10.200（dnsmasq） |
 | SSH | 22（内网与 Tailscale 可密码登录，其他来源仅密钥） |
 | Glance | 8080 |

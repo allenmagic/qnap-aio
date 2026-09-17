@@ -103,7 +103,7 @@ ssh root@192.168.122.250 'cd /root/qnap-aio && nixos-rebuild switch --flake .#de
 
 ```bash
 ip -br link                                   # 应出现 wan0 / lan0 / mv-shim
-ip -br addr show mv-shim                      # 192.168.10.250/24
+ip -br addr show mv-shim                      # 192.168.10.2/24
 systemctl list-units 'container@*'            # 五个容器
 sudo nixos-container run main-router -- ip -br addr show eth0   # .2 + 浮动 .1
 sudo nixos-container run main-router -- ip link show eth0       # 核对 MAC 是否等于配置值

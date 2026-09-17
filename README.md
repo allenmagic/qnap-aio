@@ -144,7 +144,7 @@ reboot
 
 ```bash
 # SSH 登录
-ssh nas@192.168.10.250
+ssh nas@192.168.10.2
 
 # 生成 sops age 密钥
 sudo mkdir -p /var/lib/sops-nix
@@ -290,7 +290,7 @@ cd /etc/nixos && git pull            # 或本仓库所在路径
 sudo nixos-rebuild switch --flake .#default
 ```
 
-内网访问：`http://192.168.10.250:4918`（端口仅对内网 mv-shim 放行）。
+内网访问：`http://192.168.10.2:4918`（端口仅对内网 mv-shim 放行）。
 
 **公网访问（Cloudflare Tunnel）**：隧道在路由 VM 内以 token 托管模式运行——
 `/etc/cloudflared/config.yml` 只有 token，**ingress 规则在 Cloudflare 面板配置**，
@@ -298,7 +298,7 @@ sudo nixos-rebuild switch --flake .#default
 
 > Zero Trust → Networks → Tunnels → 对应隧道 → Public Hostnames → Add
 > - Subdomain/Domain：如 `webdav.zyx1986.icu`
-> - Service：`HTTP` → `192.168.10.250:4918`（路由 VM 与 NAS 同桥，可直连）
+> - Service：`HTTP` → `192.168.10.2:4918`（路由 VM 与 NAS 同桥，可直连）
 
 回源是内网明文 HTTP（仅内网一跳），公网侧由 Cloudflare 边缘自动 HTTPS，
 NAS 上无需证书。`behindProxy = true` 让日志按 `X-Forwarded-For` 记录真实客户端 IP。
@@ -315,7 +315,7 @@ NAS 上无需证书。`behindProxy = true` 让日志按 `X-Forwarded-For` 记录
 汇总本机各 Web 服务入口（Feishin / gonic / Syncthing / Beszel / WebDAV），另有
 时钟、天气（Beijing）、服务器状态。
 
-内网访问：`http://192.168.10.250:8080`，登录用户 `nas`。
+内网访问：`http://192.168.10.2:8080`，登录用户 `nas`。
 
 **认证**：Glance 自带登录（不同于 WebDAV 的 Basic 认证），配置在 `settings.auth`：
 - `secret-key`：base64 的 64 随机字节，必须是**正好 64 字节**（`glance secret:make` 的输出）
@@ -336,7 +336,7 @@ sudo nixos-rebuild switch --flake .#default && sudo systemctl restart glance
 ```
 
 **公网访问**：和 WebDAV 同一套路，Cloudflare Zero Trust 面板加 Public Hostname →
-`HTTP` → `192.168.10.250:8080`。`server.proxied = true` 已开启，Glance 会按
+`HTTP` → `192.168.10.2:8080`。`server.proxied = true` 已开启，Glance 会按
 `X-Forwarded-For` 认客户端 IP——它自带的暴力破解防护（5 次失败封 IP 5 分钟）依赖这一点。
 
 > ⚠️ `bookmarks` 里现在是**内网地址**，从公网打开 Glance 时这些链接点不开。
@@ -383,7 +383,7 @@ btrfs filesystem show
 
 ```bash
 # 宿主机侧接口
-ip -br addr                      # 应有 mv-shim 192.168.10.250/24
+ip -br addr                      # 应有 mv-shim 192.168.10.2/24
 ip -br link                      # wan0 / lan0 应为 UP
 
 # 浮动网关在谁手里

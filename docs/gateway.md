@@ -1,5 +1,21 @@
 # NixOS 纯二层宿主机 + systemd-nspawn 容器 + Macvlan/VRRP 高可用解耦网关设计
 
+> # ⚠️ 本文已部分过时（2026-09-17）
+>
+> **「同机双容器 + VRRP 浮动网关」的方案已在真机实测后放弃，改为单网关。**
+> 原因：用隧道健康度驱动 VIP 漂移本身是故障源——实测两台 keepalived 启动相差
+> 20+ 秒，抢到 VIP 的那台若隧道没连上，它的 DNS DNAT 指向不存在的 `10.251.1.1`，
+> 全网 DNS 黑洞。而降级职责改由 `yunshu-dns-target` 在同一个容器内切换 DNAT 目标
+> 承担后，不再需要第二个容器和选举协议。
+>
+> **已过时的章节**：§7（VRRP/浮动网关）、§7.2~§7.4（失败域与切换语义）、
+> §15（WAN 双 DHCP 客户端）、附录 A 的编址部分（宿主机回到 `.2`，`.3` 释放）。
+>
+> **仍然有效**：§2~§6 的 macvlan/容器化拓扑、§6.7 的 DNS 链路、§8 数据路径、
+> §11 dnsmasq 配置、§14 XDP 约束、§17 排查方法。
+>
+> 最新口径以 `CLAUDE.md` 与 `modules/` 下的实际代码为准；本文全文尚未重写。
+
 > **实施前必读：三个前置决策已定，正文已按结论重写。这是破坏性变更，与当前
 > 运行的 `router-image` + `yunshu-nix` 部署冲突，迁移清单见附录 A。**
 >
@@ -102,7 +118,7 @@ enp3s0
   └─ 下游设备                 网关 = 192.168.10.1 (VIP)
 
 宿主机管理:
-  └─ macvlan shim @ enp3s0    192.168.10.250/32 + 默认路由
+  └─ macvlan shim @ enp3s0    192.168.10.2/32 + 默认路由
                               （宿主机自身要出网做 nix flake update / sops / NTP）
 ```
 
@@ -281,7 +297,7 @@ router VM 就是这么干的（两个实例、两个接口 ts0/tailscale0、两�
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "macvlan-shim-up" ''
         ${pkgs.iproute2}/bin/ip link add link enp3s0 name mv-shim type macvlan mode bridge
-        ${pkgs.iproute2}/bin/ip addr add 192.168.10.250/32 dev mv-shim
+        ${pkgs.iproute2}/bin/ip addr add 192.168.10.2/32 dev mv-shim
         ${pkgs.iproute2}/bin/ip link set mv-shim up
         ${pkgs.iproute2}/bin/ip route add 192.168.10.0/24 dev mv-shim
         # 默认路由必须有：宿主机要出网做 nix flake update / sops 解密 / NTP 对时，
@@ -951,7 +967,7 @@ WAN 口上会出现**两个 DHCP 客户端**（现状只有一个 router VM 在 
 
 宿主机无 IP 时无法 SSH。建议：
 
-- 加一个 macvlan shim 接口，例如 `192.168.10.250/32`。
+- 加一个 macvlan shim 接口，例如 `192.168.10.2/32`。
 - 或使用独立管理 VLAN/接口。
 
 ## 16. 从 MicroVM 迁移注意事项
@@ -1198,7 +1214,7 @@ vrrp_instance VI_LAN {
 | 角色 | 旧（当前运行） | 新（本文） |
 |---|---|---|
 | VIP / 下游默认网关 | `192.168.10.254` | `192.168.10.1` |
-| 宿主机 | `192.168.10.2` | `192.168.10.250`（macvlan shim） |
+| 宿主机 | `192.168.10.2` | `192.168.10.2`（macvlan shim） |
 | main-router | —（新增） | `192.168.10.2` |
 | side-router | —（新增） | `192.168.10.3`（现被 yunshu 容器占用） |
 | dnsmasq-container | —（新增） | `192.168.10.7`（DHCP + 降级态 DNS） |
