@@ -20,7 +20,7 @@
 - **型号**: QNAP TS-564
 - **CPU**: Intel N5095 (4核)
 - **内存**: 8GB
-- **网络**: 2×2.5G 网口（Intel igc / I225，配置中按 MAC 锚定命名为 `wan0`/`lan0`）
+- **网络**: 2×2.5G 网口（Intel igc / I225，配置中按 MAC 锚定命名为 `wan`/`lan`）
 - **存储**:
   - 1×256GB SSD (系统盘)
   - 1×1TB SSD (缓存盘)
@@ -58,10 +58,10 @@
 没有网桥：容器用 macvlan 直接挂到物理口上。
 
 ```text
-上游光猫 ── wan0 ─┬─ main-router.eth1   (VRRP MASTER, YunShu 策略分流)
+上游光猫 ── wan ─┬─ main-router.eth1   (VRRP MASTER, YunShu 策略分流)
                   └─ side-router.eth1   (VRRP BACKUP, 降级直连 NAT)
 
-内网 ───── lan0 ─┬─ main-router.eth0   .2
+内网 ───── lan ─┬─ main-router.eth0   .2
                  ├─ side-router.eth0   .3   VRRP 浮动网关 .1
                  ├─ tailscale.eth0     .4
                  ├─ cloudflared.eth0   .6
@@ -384,7 +384,7 @@ btrfs filesystem show
 ```bash
 # 宿主机侧接口
 ip -br addr                      # 应有 mv-shim 192.168.10.2/24
-ip -br link                      # wan0 / lan0 应为 UP
+ip -br link                      # wan / lan 应为 UP
 
 # 浮动网关在谁手里
 sudo nixos-container run main-router -- ip -br addr show eth0

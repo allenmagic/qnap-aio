@@ -2,7 +2,7 @@
 
 {
   imports = [
-    # 物理网口按 MAC 锚定命名（wan0 / lan0）
+    # 物理网口按 MAC 锚定命名（wan / lan）
     ./links.nix
     # 宿主机地址在 br-lan 上
     # 宿主机网络（桥）由 router-container 的 bridge.nix 声明

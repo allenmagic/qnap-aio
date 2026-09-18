@@ -66,14 +66,14 @@ echo "ssh-ed25519 AAAA..." > /root/.ssh/authorized_keys
 | `configuration.nix` 去掉 `hardware.qnap8528` | 没有 QNAP EC 硬件 |
 | 用测试机自己的 `hardware-configuration.nix` | 正式仓库那份占位模板的 initrd 只有 SATA/USB，**缺 `virtio_blk` 会开不了机** |
 | `flake.nix` 去掉 `./modules/services` | Samba/NFS/Syncthing/WebDAV/qBittorrent… 与网络测试无关，却把闭包撑到几 GB |
-| `.link` 的 MAC 改成 VM 两块网卡（`52:54:00:13:83:94` / `52:54:00:ae:56:87`） | 规则按生产 MAC 匹配，不改则 `wan0`/`lan0` 不会出现 |
+| `.link` 的 MAC 改成 VM 两块网卡（`52:54:00:13:83:94` / `52:54:00:ae:56:87`） | 规则按生产 MAC 匹配，不改则 `wan`/`lan` 不会出现 |
 | 加 `vm-test.nix`：把 `192.168.122.250` 挂到 `mv-shim` | 保命地址——部署后 `br-lan` 被删、宿主机搬到 `.250`，不留这个地址就断线 |
 
 生产与测试保留的模块：`system` / `network` / `gateway` / `security` / `users`。
 
 ## 测试局限
 
-**两块网卡都在同一个 virbr0 上**，所以 `wan0`/`lan0` 没有真正隔开。因此：
+**两块网卡都在同一个 virbr0 上**，所以 `wan`/`lan` 没有真正隔开。因此：
 
 - ❌ 测不了：上游是否接受两个 DHCP 客户端、WAN/LAN 隔离相关的行为
 - ✅ 能测：接口改名、macvlan 容器启动、容器内 MAC 固定、单播 VRRP、
@@ -102,7 +102,7 @@ ssh root@192.168.122.250 'cd /root/qnap-aio && nixos-rebuild switch --flake .#de
 ## 重启后的验收
 
 ```bash
-ip -br link                                   # 应出现 wan0 / lan0 / mv-shim
+ip -br link                                   # 应出现 wan / lan / mv-shim
 ip -br addr show mv-shim                      # 192.168.10.2/24
 systemctl list-units 'container@*'            # 五个容器
 sudo nixos-container run main-router -- ip -br addr show eth0   # .2 + 浮动 .1

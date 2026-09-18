@@ -2,7 +2,7 @@
 
 let
   # 这些服务把监听地址钉在 mv-shim 的静态地址（.2）上，而 networkd 配上该地址
-  # 比它们启动晚（macvlan 要等 lan0 出 carrier，实测差约 3 秒）。不排序的话开机
+  # 比它们启动晚（macvlan 要等 lan 出 carrier，实测差约 3 秒）。不排序的话开机
   # 会以 "cannot assign requested address" 失败，而且两种失败都不会自愈：
   # navidrome 以 0 退出（Restart=on-failure 不触发），webdav 撞 start-limit。
   bindToShim = [

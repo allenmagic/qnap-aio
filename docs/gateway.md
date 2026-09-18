@@ -102,8 +102,8 @@
   │
 enp2s0
   │
-  ├─ main-router.wan0       动态 DHCP / main endpoint 出站
-  └─ side-router.wan0     动态 DHCP / 备用直连出站
+  ├─ main-router.wan       动态 DHCP / main endpoint 出站
+  └─ side-router.wan     动态 DHCP / 备用直连出站
 
 物理 LAN
   │

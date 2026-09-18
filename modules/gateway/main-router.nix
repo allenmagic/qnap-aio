@@ -3,7 +3,7 @@
 #   LAN 走 bridge（宿主能 tcpdump 容器间流量），WAN 走 macvlan
 #   VPN 是 YunShu，以契约接入——路由器本体不认识它，换实现只改下面那一行
 #
-# 地址约定见 modules/network/：lan0 = 内网物理口，wan0 = 外网物理口。
+# 地址约定见 modules/network/：lan = 内网物理口，wan = 外网物理口。
 { config, lib, inputs, ... }:
 
 {
@@ -14,13 +14,13 @@
     name = "main-router";
 
     # ── LAN：桥。宿主地址从 macvlan shim 搬到桥上 ──
-    hostLanPort = "lan0";
+    hostLanPort = "lan";
     hostBridge = "br-lan";
     hostAddress = "192.168.10.2/24";
     hostDefaultGateway = "192.168.10.1";
 
     # ── WAN：macvlan，容器自己向上游要 DHCP ──
-    wanParent = "wan0";
+    wanParent = "wan";
 
     # ── 客户端视角：网关与 DNS 都是 .1，由 DHCP 下发 ──
     address = "192.168.10.1";

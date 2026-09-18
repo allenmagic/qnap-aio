@@ -36,14 +36,14 @@
 
 | 层 | 挂载点 | 职责 | 状态 |
 |---|---|---|---|
-| XDP | `wan0` 物理口（native） | flood 限速、IP 黑名单、畸形包、WAN 入向端口白名单 | 待做 |
-| tc egress | `wan0` / `tun0` | 防泄漏：`tun0` 未就绪时禁止 WAN 发包 | 待做 |
+| XDP | `wan` 物理口（native） | flood 限速、IP 黑名单、畸形包、WAN 入向端口白名单 | 待做 |
+| tc egress | `wan` / `tun0` | 防泄漏：`tun0` 未就绪时禁止 WAN 发包 | 待做 |
 | nftables | 每个容器内 | **default deny** + 有状态 + 每服务放行 + 日志 | 已有 |
 
 **关键约定：XDP 默认动作是 `PASS`，不是 `DROP`。** default deny 留在容器的
 nftables 里——XDP 只做"名单内的坏流量"和"超限流量"的丢弃。
 
-## 3. 第一阶段：`wan0` 口 XDP 粗过滤
+## 3. 第一阶段：`wan` 口 XDP 粗过滤
 
 风险最低（只影响外网入向），先做这个。
 
@@ -104,16 +104,16 @@ let
     installPhase = "install -D wan-filter.o $out/wan-filter.o";
   };
 in {
-  # 只在 wan0 存在后挂载；native 模式（igc 已确认支持，见 §6）
+  # 只在 wan 存在后挂载；native 模式（igc 已确认支持，见 §6）
   systemd.services.xdp-wan-filter = {
     wantedBy = [ "multi-user.target" ];
     after = [ "network-pre.target" ];
-    bindsTo = [ "sys-subsystem-net-devices-wan0.device" ];
+    bindsTo = [ "sys-subsystem-net-devices-wan.device" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.iproute2}/bin/ip link set dev wan0 xdpdrv obj ${wanFilter}/wan-filter.o sec xdp";
-      ExecStop = "${pkgs.iproute2}/bin/ip link set dev wan0 xdp off";
+      ExecStart = "${pkgs.iproute2}/bin/ip link set dev wan xdpdrv obj ${wanFilter}/wan-filter.o sec xdp";
+      ExecStop = "${pkgs.iproute2}/bin/ip link set dev wan xdp off";
     };
   };
 }
@@ -130,7 +130,7 @@ in {
 # 统计计数器（程序里 per-CPU map 维护）
 bpftool map dump name xdp_stats
 # 程序是否挂着
-ip link show dev wan0 | grep xdp
+ip link show dev wan | grep xdp
 bpftool prog show | grep wan_filter
 ```
 
@@ -140,7 +140,7 @@ bpftool prog show | grep wan_filter
 ### 3.4 回滚
 
 ```bash
-ip link set dev wan0 xdp off        # 立即摘除，不影响其他任何东西
+ip link set dev wan xdp off        # 立即摘除，不影响其他任何东西
 ```
 
 这是 XDP 相对 nftables 的**唯一优势场景**：出问题时一条命令摘掉，
@@ -151,8 +151,8 @@ ip link set dev wan0 xdp off        # 立即摘除，不影响其他任何东西
 XDP 只有入向，防不了出向。"`tun0` 未就绪时禁止 WAN 发包"这类需求走 tc：
 
 ```bash
-tc qdisc add dev wan0 clsact
-tc filter add dev wan0 egress bpf da obj leak-guard.o sec egress
+tc qdisc add dev wan clsact
+tc filter add dev wan egress bpf da obj leak-guard.o sec egress
 ```
 
 判据与 `main-router` 的健康检查保持一致（`yunshu -i` 的连接状态，不是 `ip link
@@ -160,7 +160,7 @@ show tun0`——接口存在 ≠ 已连接）。
 
 内核侧 `NET_CLS_BPF=y`/`NET_ACT_BPF=m` 已确认 ✓。
 
-## 5. 第三阶段（可选）：`lan0` 口 XDP
+## 5. 第三阶段（可选）：`lan` 口 XDP
 
 风险高得多——**丢错包会直接断掉管理通道和 NAS 服务**。
 
@@ -176,7 +176,7 @@ show tun0`——接口存在 ≠ 已连接）。
 
 ```bash
 # 挂载是否成功、模式是否为 native
-ip link show dev wan0 | grep -o "xdp/id:[0-9]*"
+ip link show dev wan | grep -o "xdp/id:[0-9]*"
 # 从另一台机器打流量，看计数器变化
 bpftool map dump name xdp_stats
 ```

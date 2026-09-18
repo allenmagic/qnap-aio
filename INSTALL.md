@@ -27,14 +27,14 @@
 ```
 上行（光猫/上级路由）
   │
-  │ wan0（原 enp2s0，宿主机不配 IP）
+  │ wan（原 enp2s0，宿主机不配 IP）
   ▼
   ├── main-router 容器 eth1   VRRP MASTER，策略分流
   └── side-router 容器 eth1   VRRP BACKUP，降级直连
 
 内网
   │
-  │ lan0（原 enp3s0，宿主机不配 IP）
+  │ lan（原 enp3s0，宿主机不配 IP）
   ▼
   ├── main-router.eth0  .2 ┐
   ├── side-router.eth0  .3 ├─ VRRP 浮动网关 .1（下游的默认网关与 DNS）
@@ -45,7 +45,7 @@
      内网设备 .100-.200（dnsmasq 提供 DHCP）
 ```
 
-> ⚠️ 接口名 `wan0`/`lan0` 是**按 MAC 锚定**的（`modules/network/links.nix`），
+> ⚠️ 接口名 `wan`/`lan` 是**按 MAC 锚定**的（`modules/network/links.nix`），
 > 不是内核给的 `enpXsY`。改名由 udev 在设备出现时处理，**必须重启才生效**，
 > 生效后旧名消失。
 
@@ -65,7 +65,7 @@ ip a          # 确认有接口拿到了 DHCP 地址
 ping -c 3 8.8.8.8
 ```
 
-> 备注：ISO 环境下网口都自动 DHCP，装完系统后才会按配置变成 `wan0`/`lan0` 并交给容器。
+> 备注：ISO 环境下网口都自动 DHCP，装完系统后才会按配置变成 `wan`/`lan` 并交给容器。
 
 ## 2. 磁盘分区与 RAID 创建
 
@@ -242,7 +242,7 @@ btrfs device stats /srv/data   # 校验错误计数应为 0
 # 1. 重建系统
 sudo nixos-rebuild switch --flake .#default
 
-# 2. 重启宿主 —— **必须**：物理口改名（enpXsY → wan0/lan0）由 udev 在设备
+# 2. 重启宿主 —— **必须**：物理口改名（enpXsY → wan/lan）由 udev 在设备
 #    出现时处理，switch 不会重命名一个正在用的接口
 sudo reboot
 ```
@@ -250,7 +250,7 @@ sudo reboot
 重启后五个容器自动启动。验证：
 
 ```bash
-# 接口名已切换（应看到 wan0 / lan0 / mv-shim，不再是 enp2s0/enp3s0）
+# 接口名已切换（应看到 wan / lan / mv-shim，不再是 enp2s0/enp3s0）
 ip -br link
 
 # 宿主机自己的地址与路由
@@ -360,7 +360,7 @@ ping -c 3 192.168.10.2   # 内网到 NAS 连通
 ## 8. 验收清单
 
 - [ ] 重启 NAS 后 Btrfs RAID1 数据卷自动挂载（`btrfs filesystem show` 显示两个成员）
-- [ ] 接口名已是 `wan0`/`lan0`（不再是 `enp2s0`/`enp3s0`），且 `mv-shim` 有 `192.168.10.2/24`
+- [ ] 接口名已是 `wan`/`lan`（不再是 `enp2s0`/`enp3s0`），且 `mv-shim` 有 `192.168.10.2/24`
 - [ ] 五个容器全部 running（`systemctl list-units 'container@*'`）
 - [ ] 浮动网关 `.1` 在 main-router 的 eth0 上；停掉它之后漂移到 side-router
 - [ ] 下游客户端自动获取 DHCP 地址，网关与 DNS 都是 `.1`
@@ -396,7 +396,7 @@ ping -c 3 192.168.10.2   # 内网到 NAS 连通
 |---|---|
 | 重启后数据卷未挂载 | `btrfs device scan && mount /srv/data`；确认 filesystem.nix 卷标与 `mkfs.btrfs -L` 一致 |
 | flake 报 not tracked by Git | `git add -N -f hardware-configuration.nix` |
-| 宿主完全没有网络 | `ip -br addr show mv-shim`；`ip link show lan0`；若改名没生效说明没重启 |
+| 宿主完全没有网络 | `ip -br addr show mv-shim`；`ip link show lan`；若改名没生效说明没重启 |
 | 容器起不来 | `journalctl -u container@<名字> -b`；多半是 bindMount 源目录不存在 |
 | 浮动网关没接管 | 两个容器各自 `ip -br addr`；`tcpdump -i eth0 -n proto 112` 看心跳是否互通（收不到 ⇒ 防火墙/接口名） |
 | DHCP 客户端拿不到地址 | dnsmasq 容器内 `systemctl status dnsmasq`、`cat /var/lib/dnsmasq/dnsmasq.leases`；确认 67/udp 已放行 |
