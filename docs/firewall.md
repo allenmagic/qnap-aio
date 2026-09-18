@@ -26,7 +26,7 @@
 |---|---|
 | `input` 链 policy drop + `ct state` | NixOS firewall 模块 |
 | `forward` 链 policy drop + `ct state` | `networking.firewall.filterForward = true` |
-| 每服务最小放行（DNS/DHCP/隧道）、MSS clamp、`iifname host0 accept` | `router-container/modules/container.nix` |
+| 每服务最小放行（DNS/DHCP/隧道）、MSS clamp、`iifname lan accept` | `router-container/modules/container.nix` |
 | masquerade | `router-container/modules/guest/nat.nix` |
 | 客户端 DNS 监听（本机 dnsmasq） | `router-container/modules/guest/dns.nix` |
 | 兜底日志 `limit rate N/minute log + drop` | ⚠️ 目前没有——原 router-vm 有，迁移时加上又因噪音移除 |

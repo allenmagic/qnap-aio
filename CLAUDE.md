@@ -74,7 +74,7 @@ sops secrets/secrets.yaml                         # 编辑加密密钥（需要 
 
 **LAN 走 bridge，宿主地址在 `br-lan`（`.2`）**，物理口 `lan` 只做二层端口。
 这样宿主机**看得见容器间流量**（`tcpdump -i br-lan`）——macvlan 下看不见，
-是上一轮排障最大的障碍。容器内的 LAN 口是 nspawn 的 veth，固定叫 `host0`。
+是上一轮排障最大的障碍。容器内的 LAN 口叫 `lan`、WAN 口叫 `wan`（按作用命名）。
 
 WAN 侧仍是 macvlan：nspawn 的 `--network-bridge` 只作用于 `--network-veth` 那一个接口，
 容器只能有一个桥接口。macvlan 侧的 DHCP 实测一直正常。
@@ -97,9 +97,9 @@ DNS，否则 flake update / sops 解密 / NTP 对时全都做不了。默认路�
 
 | 文件 | 容器 | 接法 | 要点 |
 |---|---|---|---|
-| `main-router.nix` | main-router | `br-lan`(veth `host0`) + `wan`(macvlan `eth1`) | 由 **`router-container`** 构建；唯一网关 |
-| `tailscale.nix` | tailscale | `br-lan`(`host0`) | 官方实例走 `services.tailscale`，headscale 实例手写单元（NixOS 不支持多实例） |
-| `cloudflared.nix` | cloudflared | `br-lan`(`host0`) | token 模式，`services.cloudflared` 不支持所以手写 |
+| `main-router.nix` | main-router | `br-lan`(veth `lan`) + `wan`(macvlan `wan`) | 由 **`router-container`** 构建；唯一网关 |
+| `tailscale.nix` | tailscale | `br-lan`(`lan`) + `wan`(macvlan `wan`) | 官方实例走 `services.tailscale`，headscale 实例手写单元（NixOS 不支持多实例） |
+| `cloudflared.nix` | cloudflared | `br-lan`(`lan`) | token 模式，`services.cloudflared` 不支持所以手写 |
 
 `main-router` 的全部配置就是十几个 `router.*` 选项 + **一行 VPN**：
 `router.vpn = inputs.router-container.vpns.yunshu`。路由器本体不认识 YunShu，
@@ -111,14 +111,16 @@ VPN 通过契约（`transit.{interface,fakeIpCidrs,dnsUpstream}` + `guestModules
 - **网关地址只在 `router.address` 写一次**：`router-container` 据此设置 LAN 接口地址，
   并让本机解析器监听它。别在容器 config 里再写一份
   `networking.interfaces.*.ipv4.addresses`——两处不一致时 DNS 会静默失效。
-- **容器内 LAN 口叫 `host0`，不是 `eth0`**：nspawn 的 `--network-veth` 固定给这个名字。
-  不要试图改名——macvlan 时代那套 udev `.link` 改名静默失效过一次，不值得再赌。
+- **容器内两侧的名字都是我们自己起的（`lan` / `wan`）**，但 LAN 侧要多一步改名：
+  nspawn 建的 veth 名字随 systemd 版本变（man 页写 `host0`，260 实测给 `eth0`），
+  `router-container` 的 `mac.nix` 按"是不是 veth"找出来改成 `lan`。别写死任何一个，
+  也别改回 udev `.link`（macvlan 时代验证过：容器内 udev 收不到事件，静默无效）。
 - **网关容器的 MAC 必须固定**（`router.macAddresses`，`02:00:00:02:00:XX`）。nspawn 每次
   重建都随机生成，漂了的后果是上游 DHCP 租约变化、按 MAC 绑定失效。用 oneshot 直接
   `ip link set`，不用容器内 udev `.link`（对这类接口静默无效）。
-- **DNS 链路不要"顺手优化"**：客户端 DNS 由 DHCP 下发为网关 `.1`，main-router 再按 tun0
-  有无决定上游用「YunShu 隧道 DNS」还是公网 DNS。一旦把客户端 DNS 改成别的地址
-  （绕开网关），fake-IP 不再触发，域名级分流直接失效（AdGuard 方案就是因此被废弃的）。
+- **DNS 链路不要"顺手优化"**：客户端 DNS 由 DHCP 下发为网关 `.1`，由网关内的 dnsmasq
+  按 `strict-order` 把上游排成「YunShu 隧道 DNS → 公网 DNS」。一旦把客户端 DNS 改成
+  别的地址（绕开网关），fake-IP 不再触发，域名级分流直接失效（AdGuard 方案就是因此被废弃的）。
 - **DNS 由网关本机解析器提供，不要改回跨容器 DNAT**：`router-container/modules/guest/dns.nix`
   在网关地址上起 dnsmasq，上游 `strict-order` 排成「隧道 DNS → 公网 DNS」。真机实测过
   跨容器 DNAT 根本不通（指向别的容器或公网地址一律超时），而且目标不可达时客户端 DNS

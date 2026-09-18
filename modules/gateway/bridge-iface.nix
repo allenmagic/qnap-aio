@@ -39,12 +39,12 @@ let
 in
 {
   containers.tailscale.config = mkPrepare {
-    iface = "host0";
+    iface = "lan";
     mac = "02:00:00:02:00:41";
   };
 
   containers.cloudflared.config = mkPrepare {
-    iface = "host0";
+    iface = "lan";
     mac = "02:00:00:02:00:51";
   };
 }

@@ -1,6 +1,6 @@
 # tailscale —— 两个 tailscale 实例合并在一个容器里
 #
-#   br-lan ──> host0   192.168.10.4/24   LAN（单口，出站直连）
+#   br-lan ──> lan     192.168.10.4/24   LAN（单口，出站直连）
 #
 # 两个实例互为独立 tailnet，不是主备关系（Tailscale 没有 failover 语义）：
 #   - 官方控制面：接口 tailscale0，UDP 41641
@@ -56,7 +56,7 @@ in
     # 自己在 WAN 上也要一个地址：让隧道**不依赖网关出网**。
     # 网关挂掉时隧道仍在，从外面还能进内网修机器（内网设备的网关/DNS 此时都失效，
     # 但 tailnet→内网的入站不经过网关，NAS 宿主机仍是可达的）。
-    macvlans = [ "wan:eth1" ];
+    macvlans = [ "wan:wan" ];
 
     extraFlags = [
       "--load-credential=ts-authkey:${config.sops.secrets.tailscale-auth-key.path}"
@@ -87,11 +87,11 @@ in
           Type = "oneshot";
           RemainAfterExit = true;
         };
-        script = "${pkgs.iproute2}/bin/ip link set eth1 address ${wanMac}";
+        script = "${pkgs.iproute2}/bin/ip link set wan address ${wanMac}";
       };
 
       networking = {
-        interfaces.host0.ipv4.addresses = [
+        interfaces.lan.ipv4.addresses = [
           {
             address = lanIp;
             prefixLength = 24;
@@ -100,8 +100,8 @@ in
 
         # 默认路由走**自己的 WAN 口**（DHCP 提供），不指向网关 .1：
         # 这是本容器唯一依赖 .1 的地方，去掉之后网关故障不影响隧道存活。
-        # 内网不受影响——靠 host0 的直连路由。
-        interfaces.eth1.useDHCP = true;
+        # 内网不受影响——靠 lan 的直连路由。
+        interfaces.wan.useDHCP = true;
         # nohook：resolv.conf 下面写死了，dhcpcd 写它会报错。
         # hostname：dhcpcd 默认不发 hostname，上游设备列表里只会看到 MAC。
         dhcpcd.extraConfig = ''
@@ -138,13 +138,14 @@ in
       # 于是不装任何 NAT 规则；缺了它，LAN 主机的回包会发给默认网关（.1），
       # 而网关没有 100.64.0.0/10 的路由 → subnet routing 整个不通。
       # 不给 tailscale 接管 nftables，只显式补这一条。
+      # lan 是本容器的 LAN 口，由 bridge-iface.nix 把 nspawn 的 veth 改名而来。
       networking.nftables.enable = true;
       networking.nftables.tables.ts-subnet = {
         family = "ip";
         content = ''
           chain postrouting {
             type nat hook postrouting priority srcnat; policy accept;
-            oifname "host0" ip saddr 100.64.0.0/10 masquerade
+            oifname "lan" ip saddr 100.64.0.0/10 masquerade
           }
         '';
       };

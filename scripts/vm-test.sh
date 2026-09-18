@@ -169,10 +169,10 @@ do_verify() {
   chk "lan 口 up"  'cat /sys/class/net/lan/operstate' '^up$'
   chk "三个容器都在跑" 'systemctl list-units "container@*" --state=running --no-legend' 'container@main-router'
   chk "无重启循环（NRestarts=0）" 'systemctl show container@main-router -p NRestarts --value' '^0$'
-  chk "★ main-router 里 host0 有地址" 'nixos-container run main-router -- ip -br addr show host0' '192\.168\.10\.1/24'
-  chk "★ host0 的 MAC 已固定" 'nixos-container run main-router -- cat /sys/class/net/host0/address' '02:00:00:02:00:11'
+  chk "★ main-router 里 lan 有地址" 'nixos-container run main-router -- ip -br addr show lan' '192\.168\.10\.1/24'
+  chk "★ lan 的 MAC 已固定" 'nixos-container run main-router -- cat /sys/class/net/lan/address' '02:00:00:02:00:11'
   chk "main-router 到 Multi-User" 'journalctl -D /var/lib/nixos-containers/main-router/var/log/journal --no-pager -b 0 2>/dev/null | grep -c "Reached target Multi-User"' '^[1-9]'
-  chk "★ tailscale 双宿主机（host0=.4）" 'nixos-container run tailscale -- ip -br addr show host0' '192\.168\.10\.4/24'
+  chk "★ tailscale 双宿主机（lan=.4）" 'nixos-container run tailscale -- ip -br addr show lan' '192\.168\.10\.4/24'
 
   say "完整链路"
   $SSH 'nixos-container run main-router -- sh -c "ip -br addr; echo; ip route show default" 2>&1 | head -10'

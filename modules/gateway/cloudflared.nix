@@ -1,5 +1,5 @@
 # cloudflared —— 内网服务的内网穿透隧道（出站连接，无需入站放行）
-#   br-lan ──> host0   192.168.10.6/24   LAN（单口，出站直连）
+#   br-lan ──> lan     192.168.10.6/24   LAN（单口，出站直连）
 { config, lib, pkgs, ... }:
 
 let
@@ -24,7 +24,7 @@ in
       networking.hostName = "cloudflared";
 
       networking = {
-        interfaces.host0.ipv4.addresses = [
+        interfaces.lan.ipv4.addresses = [
           {
             address = lanIp;
             prefixLength = 24;
@@ -32,7 +32,7 @@ in
         ];
         defaultGateway = {
           address = gatewayIp;
-          interface = "host0";
+          interface = "lan";
         };
         resolvconf.enable = false;
         # 隧道是纯出站的，不需要放行任何入站端口

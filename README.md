@@ -64,13 +64,13 @@
 （nspawn 的 `--network-bridge` 只作用于 veth 那一个接口，容器只能有一个桥接口）。
 
 ```text
-上游光猫 ── wan ── macvlan ── main-router.eth1（自己向上游要 DHCP）
+上游光猫 ── wan ── macvlan ── main-router.wan（自己向上游要 DHCP）
 
-内网 ───── lan ──┬─ br-lan ─┬─ main-router.host0  .1   网关 + DHCP + DNS + YunShu 分流
-                 │          ├─ tailscale.host0    .4   双实例子网路由器
-                 │          ├─ cloudflared.host0  .6   Cloudflare 隧道回源
+内网 ───── lan ──┬─ br-lan ─┬─ main-router.lan     .1   网关 + DHCP + DNS + YunShu 分流
+                 │          ├─ tailscale.lan      .4   双实例子网路由器
+                 │          ├─ cloudflared.lan    .6   Cloudflare 隧道回源
                  │          └─ 宿主机             .2   br-lan 上的管理地址
-                 └─ macvlan ──── tailscale.eth1       自己的 WAN 出口（隧道不依赖网关）
+                 └─ macvlan ──── tailscale.wan        自己的 WAN 出口（隧道不依赖网关）
      内网设备 .100-.200（main-router 内的 dnsmasq 提供 DHCP）
 ```
 
@@ -406,7 +406,7 @@ btrfs filesystem show
 ip -br addr                      # 应有 br-lan 192.168.10.2/24
 ip -br link                      # wan / lan 应为 UP
 
-# 网关地址在容器里（host0=.1，eth1=上游 DHCP 拿到的地址）
+# 网关地址在容器里（lan=.1，wan=上游 DHCP 拿到的地址）
 sudo nixos-container run main-router -- ip -br addr
 
 # ★ bridge 改造的主要收益：宿主机看得见容器间/容器到外网的流量

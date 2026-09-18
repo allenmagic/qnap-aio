@@ -29,15 +29,15 @@
   │
   │ wan（原 enp2s0，宿主机不配 IP）
   ▼
-  └── main-router 容器 eth1（macvlan，自己向上游要 DHCP）
+  └── main-router 容器 wan（macvlan，自己向上游要 DHCP）
 
 内网
   │
   │ lan（原 enp3s0，宿主机不配 IP，只做 br-lan 的二层端口）
   ▼
-  └── br-lan ┬── main-router.host0  .1   唯一网关 + DHCP + DNS（option 3/6 都下发 .1）
-             ├── tailscale.host0    .4   子网路由器（另有自己的 WAN 出口）
-             ├── cloudflared.host0  .6
+  └── br-lan ┬── main-router.lan     .1   唯一网关 + DHCP + DNS（option 3/6 都下发 .1）
+             ├── tailscale.lan      .4   子网路由器（另有自己的 WAN 出口）
+             ├── cloudflared.lan    .6
              └── 宿主机             .2   管理地址（SSH/NFS/Samba 都绑它）
      内网设备 .100-.200（main-router 内的 dnsmasq 提供 DHCP）
 ```
@@ -257,7 +257,7 @@ ip route                                   # 默认路由应指向 192.168.10.1
 # 三个容器都起来了
 systemctl list-units 'container@*'
 
-# 网关在 main-router 里：host0=.1，eth1=上游 DHCP 拿到的地址
+# 网关在 main-router 里：lan=.1，wan=上游 DHCP 拿到的地址
 sudo nixos-container run main-router -- ip -br addr
 
 # 下游能拿到地址（笔记本改成 DHCP 后）
@@ -310,7 +310,7 @@ sudo nixos-container run tailscale -- tailscale --socket=/run/headscale/tailscal
 
 ```bash
 # main-router：网关地址、NAT/DNS/DHCP
-sudo nixos-container run main-router -- ip -br addr        # host0=.1，eth1=上游 DHCP
+sudo nixos-container run main-router -- ip -br addr        # lan=.1，wan=上游 DHCP
 sudo nixos-container run main-router -- nft list ruleset | head
 sudo nixos-container run main-router -- systemctl status dnsmasq
 
@@ -357,7 +357,7 @@ dig @192.168.10.1 www.baidu.com  | grep -A1 ANSWER
 - [ ] 重启 NAS 后 Btrfs RAID1 数据卷自动挂载（`btrfs filesystem show` 显示两个成员）
 - [ ] 接口名已是 `wan`/`lan`（不再是 `enp2s0`/`enp3s0`），且 `br-lan` 有 `192.168.10.2/24`
 - [ ] 三个容器全部 running（`systemctl list-units 'container@*'`）
-- [ ] 网关 `.1` 在 main-router 的 `host0` 上，且 `eth1` 从上游拿到了地址
+- [ ] 网关 `.1` 在 main-router 的 `lan` 上，且 `wan` 从上游拿到了地址
 - [ ] 宿主 `tcpdump -i br-lan` 抓得到内网流量（bridge 改造的验收点）
 - [ ] 下游客户端自动获取 DHCP 地址，网关与 DNS 都是 `.1`
 - [ ] 被墙域名走隧道、境内直连（分流生效；测之前先 `systemctl stop nscd`）
@@ -370,7 +370,7 @@ dig @192.168.10.1 www.baidu.com  | grep -A1 ANSWER
 
 | 项目 | 值 |
 |---|---|
-| 网关（下游的默认网关与 DNS） | 192.168.10.1（main-router 的 `host0`，由 DHCP 下发） |
+| 网关（下游的默认网关与 DNS） | 192.168.10.1（main-router 的 `lan`，由 DHCP 下发） |
 | NAS 宿主机 | 192.168.10.2（在 `br-lan` 上） |
 | tailscale 容器 | 192.168.10.4 |
 | cloudflared 容器 | 192.168.10.6 |
@@ -393,7 +393,7 @@ dig @192.168.10.1 www.baidu.com  | grep -A1 ANSWER
 | 宿主完全没有网络 | `ip -br addr show br-lan`；`ip link show lan`；若改名没生效说明没重启 |
 | 容器起不来 | `journalctl -u container@<名字> -b`；多半是 bindMount 源目录不存在 |
 | 容器里看不到 journal | 读容器自己的：`journalctl -D /var/lib/nixos-containers/<名字>/var/log/journal -b`（宿主 journal 只有 console 转发，会断） |
-| 网关地址不在容器里 | `nixos-container run main-router -- ip -br addr`；`host0` 没有 `.1` 多半是 veth 改名失败 |
+| 网关地址不在容器里 | `nixos-container run main-router -- ip -br addr`；`lan` 没有 `.1` 多半是 veth 改名失败 |
 | DHCP 客户端拿不到地址 | `nixos-container run main-router -- systemctl status dnsmasq`、`cat /var/lib/dnsmasq/dnsmasq.leases`；确认 67/udp 已放行 |
 | 外网不通但容器正常 | 容器内 `nft list ruleset` 看 masquerade 是否打在 WAN 口上、`ip route` 看默认路由 |
 | 分流失效（境内网站也走代理） | 先 `systemctl stop nscd` 再测；确认 DHCP 下发的 option 6 是 `.1` 而不是某个容器地址 |

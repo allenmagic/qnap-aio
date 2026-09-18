@@ -11,7 +11,7 @@
 >
 > **② 2026-09-18：LAN 侧从 macvlan 换成 bridge，容器从 5 个减到 3 个。**
 > 宿主机地址回到 `br-lan`（`.2`，不再是 `.250` 的 macvlan shim），容器内 LAN 口
-> 是 nspawn 的 veth（固定名 `host0`）；`side-router` / `dnsmasq` 两个容器已删除。
+> 是 nspawn 的 veth（改名为 `lan`）；`side-router` / `dnsmasq` 两个容器已删除。
 > main-router 本身改由 `router-container` 仓库提供。
 >
 > **已过时的章节**：§3/§6 的拓扑与编址（宿主机 `.2` 在桥上、`.3`/`.7` 释放）、

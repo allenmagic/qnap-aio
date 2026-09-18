@@ -5,7 +5,7 @@
 
 验证目标：接口改名、编址迁移、bridge 改造、三个网关容器启动、veth 改名与 MAC 固定。
 `vm-test.sh verify` 的判据就是这几条（宿主地址在 `br-lan`、`wan`/`lan` up、三个容器
-running、main-router 的 `NRestarts=0`、`host0` 有 `.1` 且 MAC 是配置值、tailscale `.4`）。
+running、main-router 的 `NRestarts=0`、`lan` 有 `.1` 且 MAC 是配置值、tailscale `.4`）。
 
 脚本没覆盖、需要手工看的：DHCP 租约、宿主 `tcpdump -i br-lan` 的可见性、
 启动排序（`journalctl -D /var/lib/nixos-containers/main-router/var/log/journal -b`）。
