@@ -1,18 +1,10 @@
 # cloudflared —— 内网服务的内网穿透隧道（出站连接，无需入站放行）
-#
 #   br-lan ──> host0   192.168.10.6/24   LAN（单口，出站直连）
-#
-# token 模式（ingress 在 Cloudflare 面板管理），因此不用 NixOS 的
-# services.cloudflared——那个模块只支持 credentials-file + 本地 ingress 配置。
-#
-# 出站走默认网关 main-router；它的 resolv.conf 是公网 DNS，拿不到 fake-IP，
-# 因此不会被 YunShu 分流（见 docs/gateway.md §6.4）。
 { config, lib, pkgs, ... }:
 
 let
   lanIp = "192.168.10.6";
   gatewayIp = "192.168.10.1";
-
 
   credDir = "/run/credentials/@system";
 in
@@ -67,14 +59,7 @@ in
         serviceConfig = {
           Restart = "on-failure";
           RestartSec = 5;
-          # token 经环境变量传给 cloudflared（它认 TUNNEL_TOKEN），
-          # 而不是走命令行参数——命令行会出现在 /proc/<pid>/cmdline 里。
-          # 用 shell 展开读取凭据，进程退出后 token 不残留在任何地方。
-          #
-          # --protocol http2 是刻意的：QUIC（UDP 7844）在国内网络常被运营商
-          # 干扰，隧道会频繁重连；http2 走 TCP 最稳。参数位置在 tunnel 与
-          # run 之间（cloudflared 的 help 文本不列它，以官方 run-parameters
-          # 文档为准）。这两行是 router-image 里踩出来的，别照着直觉"优化"。
+          # token 经环境变量传给 cloudflared（它认 TUNNEL_TOKEN）
           ExecStart = pkgs.writeShellScript "cloudflared-run" ''
             TUNNEL_TOKEN="$(cat ${credDir}/cf-token)" \
               exec ${pkgs.cloudflared}/bin/cloudflared --no-autoupdate tunnel --protocol http2 run
