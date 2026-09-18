@@ -105,14 +105,6 @@ FLAKE
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDxOVLqS8pbklbsF+dM+frmUC4nFD9czNqkx5XsuEVE9"
   ];
 
-  # VM 是直连出口，cachix 在国内不可达——留着它每个路径都要超时重试 5 次。
-  # 只保留国内可达的镜像与官方 cache。
-  nix.settings.substituters = lib.mkForce [
-    "https://mirror.nju.edu.cn/nix-channels/store"
-    "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store"
-    "https://cache.nixos.org"
-  ];
-
   # 保命地址：bridge 改造后 mv-shim 不存在，必须挂 br-lan，否则失去 SSH 入口
   systemd.services.vm-test-addr = {
     wantedBy = [ "multi-user.target" ];
