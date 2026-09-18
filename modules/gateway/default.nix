@@ -12,5 +12,7 @@
     ./main-router.nix
     ./tailscale.nix
     ./cloudflared.nix
+    # 桥接容器的接口整备（nspawn 的 veth 改名 + 固定 MAC）
+    ./bridge-iface.nix
   ];
 }
