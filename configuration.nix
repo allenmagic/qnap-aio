@@ -38,4 +38,7 @@
   # Boot loader
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  # 默认 null（不限），29 个世代时 /boot 里菜单一路堆到 29 条。
+  # 20 条够回滚用（bootctl 的保险只用到前一条），也让 /boot 有界。
+  boot.loader.systemd-boot.configurationLimit = 20;
 }
