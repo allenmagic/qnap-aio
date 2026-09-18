@@ -102,8 +102,12 @@ in
         # 这是本容器唯一依赖 .1 的地方，去掉之后网关故障不影响隧道存活。
         # 内网不受影响——靠 host0 的直连路由。
         interfaces.eth1.useDHCP = true;
-        # resolv.conf 下面写死了，禁止 dhcpcd 去写它（那是只读的 store 符号链接）
-        dhcpcd.extraConfig = "nohook resolv.conf";
+        # nohook：resolv.conf 下面写死了，dhcpcd 写它会报错。
+        # hostname：dhcpcd 默认不发 hostname，上游设备列表里只会看到 MAC。
+        dhcpcd.extraConfig = ''
+          nohook resolv.conf
+          hostname tailscale
+        '';
         resolvconf.enable = false;
 
         firewall = {
