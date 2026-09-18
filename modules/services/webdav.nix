@@ -18,7 +18,7 @@
     environmentFile = config.sops.secrets.webdav-password.path;
 
     settings = {
-      address = "192.168.10.2"; # 只绑内网 shim（mv-shim）
+      address = "192.168.10.2"; # 只绑内网（宿主机地址在 br-lan 上）
       port = 4918;              # RFC 4918 的 WebDAV 惯用端口
       directory = "/srv/data/webdav";
       permissions = "CRUD";     # 读写（C/R/U/D），级联给下面的用户

@@ -28,8 +28,9 @@ jobs:
       - name: Flake check
         run: nix flake check --accept-flake-config
 
-      # TODO(步骤 2)：容器骨架落地后，在这里补网关容器的求值断言
-      # （containers.<name>.autoStart / macvlans / keepalived 实例参数等）
+      # TODO(步骤 2)：补网关容器的求值断言
+      # （containers.<name>.autoStart / hostBridge / macvlans，以及 router.* 的
+      #  地址与 DHCP option 等；目前只保证整树能求值、能 dry-run 构建）
 
       - name: Build toplevel (dry-run)
         run: nix build --dry-run .#nixosConfigurations.default.config.system.build.toplevel

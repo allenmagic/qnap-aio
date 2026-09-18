@@ -31,7 +31,7 @@ let
 in
 {
   services.beszel = {
-    # ---- hub：Web 面板（8090，mv-shim 放行见 network/default.nix） ----
+    # ---- hub：Web 面板（8090，br-lan 放行见 network/default.nix） ----
     hub = {
       enable = true;
       host = "0.0.0.0";    # 默认 127.0.0.1；对外访问需全接口

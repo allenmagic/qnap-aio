@@ -9,7 +9,7 @@
 
     settings = {
       server = {
-        host = "192.168.10.2"; # 只绑内网 shim（mv-shim）
+        host = "192.168.10.2"; # 只绑内网（宿主机地址在 br-lan 上）
         port = 8080;
         # 经 cloudflared 回源：按 X-Forwarded-For 认客户端 IP。Glance 自带的
         # 暴力破解防护（5 次失败封 IP 5 分钟）依赖它，不加则所有请求同源。

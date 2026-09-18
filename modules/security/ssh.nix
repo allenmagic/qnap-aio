@@ -26,7 +26,7 @@
     # 监听端口（默认 22）
     ports = [ 22 ];
 
-    # 不在全局放行 22 端口：mv-shim 已在 network/default.nix 显式放行，
+    # 不在全局放行 22 端口：br-lan 已在 network/default.nix 显式放行，
     # openFirewall = true 会把 22 加到全局 allowedTCPPorts（作用于所有接口）
     openFirewall = false;
 
