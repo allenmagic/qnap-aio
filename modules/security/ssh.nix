@@ -7,7 +7,10 @@
 
     settings = {
       # 安全设置
-      PermitRootLogin = "prohibit-password";  # 禁止 root 密码登录，只允许密钥
+      # 开 root 密码登录是有意的：给一条"密钥不可用时"的救援通道。
+      # 安全边界由下面的 Match 保证——密码认证只在 LAN 与 tailnet 放开，
+      # 公网进不来；且 root 本身已有密码（passwd -S root 显示 P）。
+      PermitRootLogin = "yes";
       PasswordAuthentication = false;  # 默认禁用密码认证；仅内网通过下方 Match 放行
       PubkeyAuthentication = true;     # 启用公钥认证
 
