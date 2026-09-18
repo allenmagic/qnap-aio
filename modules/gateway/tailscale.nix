@@ -116,6 +116,21 @@ in
         "net.ipv6.conf.default.disable_ipv6" = 1;
       };
 
+      # subnet router 的 SNAT。两个实例都设了 netfilter-mode=off，tailscaled
+      # 于是不装任何 NAT 规则；缺了它，LAN 主机的回包会发给默认网关（.1），
+      # 而网关没有 100.64.0.0/10 的路由 → subnet routing 整个不通。
+      # 不给 tailscale 接管 nftables，只显式补这一条。
+      networking.nftables.enable = true;
+      networking.nftables.tables.ts-subnet = {
+        family = "ip";
+        content = ''
+          chain postrouting {
+            type nat hook postrouting priority srcnat; policy accept;
+            oifname "eth0" ip saddr 100.64.0.0/10 masquerade
+          }
+        '';
+      };
+
       # ── 官方控制面实例（tailscale0 / 41641）──────────────────────────
       # 用 NixOS 原生模块：它负责 tailscaled 单元、"up + set"的时序、
       # 以及 useRoutingFeatures 带出的转发 sysctl 与防火墙规则。
