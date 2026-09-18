@@ -136,11 +136,11 @@
         "yunshu-nix": "yunshu-nix"
       },
       "locked": {
-        "lastModified": 1789733211,
-        "narHash": "sha256-pmMfI/5izia7Vi/xXfP/uDrpxMLhgF2Gmfv6W5/z1sc=",
+        "lastModified": 1789733708,
+        "narHash": "sha256-gRkr3oBqyTuUVnq1u9CvviaAXSUnaEGdy2qtob7uTds=",
         "ref": "refs/heads/main",
-        "rev": "1f1d5c1bcf6f2c0582939eaa60881d2afa4258de",
-        "revCount": 9,
+        "rev": "368c2c38ae54f7a248fc9798fe3d3d94220b193d",
+        "revCount": 10,
         "type": "git",
         "url": "https://github.com/allenmagic/router-container"
       },
@@ -179,15 +179,15 @@
       "locked": {
         "lastModified": 1789716711,
         "narHash": "sha256-ISrUjdakGuk2v56NGkmrWjmVrUZDKbR/QPgpOooD11w=",
-        "owner": "allenmagic",
-        "repo": "yunshu-nix",
+        "ref": "refs/heads/main",
         "rev": "337ad79bb7013a2ebd6470e7eaee549ddb5bf953",
-        "type": "github"
+        "revCount": 30,
+        "type": "git",
+        "url": "https://github.com/allenmagic/yunshu-nix"
       },
       "original": {
-        "owner": "allenmagic",
-        "repo": "yunshu-nix",
-        "type": "github"
+        "type": "git",
+        "url": "https://github.com/allenmagic/yunshu-nix"
       }
     }
   },
