@@ -1,6 +1,6 @@
 # tailscale —— 两个 tailscale 实例合并在一个容器里
 #
-#   lan0 ──> eth0   192.168.10.4/24   LAN（单口，出站直连）
+#   br-lan ──> host0   192.168.10.4/24   LAN（单口，出站直连）
 #
 # 两个实例互为独立 tailnet，不是主备关系（Tailscale 没有 failover 语义）：
 #   - 官方控制面：接口 tailscale0，UDP 41641
@@ -16,7 +16,7 @@
 let
   lanIp = "192.168.10.4";
   gatewayIp = "192.168.10.1";
-  mac = "02:00:00:02:00:41";
+
 
   stateDir = "/srv/state/tailscale"; # data 卷的子卷，不在 NFS/Samba 导出内
   advertiseRoute = "192.168.10.0/24";
@@ -51,7 +51,7 @@ in
     autoStart = true;
     privateNetwork = true;
     enableTun = true;
-    macvlans = [ "lan0:eth0" ];
+    hostBridge = "br-lan";
 
     extraFlags = [
       "--load-credential=ts-authkey:${config.sops.secrets.tailscale-auth-key.path}"
@@ -74,13 +74,8 @@ in
       system.stateVersion = "26.05";
       networking.hostName = "tailscale";
 
-      systemd.network.links."10-eth0" = {
-        matchConfig.Name = "eth0";
-        linkConfig.MACAddress = mac;
-      };
-
       networking = {
-        interfaces.eth0.ipv4.addresses = [
+        interfaces.host0.ipv4.addresses = [
           {
             address = lanIp;
             prefixLength = 24;
@@ -88,7 +83,7 @@ in
         ];
         defaultGateway = {
           address = gatewayIp;
-          interface = "eth0";
+          interface = "host0";
         };
         resolvconf.enable = false;
 
@@ -126,7 +121,7 @@ in
         content = ''
           chain postrouting {
             type nat hook postrouting priority srcnat; policy accept;
-            oifname "eth0" ip saddr 100.64.0.0/10 masquerade
+            oifname "host0" ip saddr 100.64.0.0/10 masquerade
           }
         '';
       };

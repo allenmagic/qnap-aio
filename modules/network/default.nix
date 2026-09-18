@@ -2,10 +2,10 @@
 
 {
   imports = [
-    # 物理网口按 MAC 锚定命名（wan0 / lan0）——必须排在 shim 之前
+    # 物理网口按 MAC 锚定命名（wan0 / lan0）
     ./links.nix
-    # 纯二层 + macvlan shim：宿主机的三层只走 mv-shim
-    ./shim.nix
+    # 宿主机地址在 br-lan 上
+    # 宿主机网络（桥）由 router-container 的 bridge.nix 声明
   ];
 
   # 基础网络配置
@@ -18,7 +18,9 @@
     firewall = {
       enable = true;
 
-      interfaces.mv-shim = {
+      # ⚠️ 接口名必须与 router-container 的 hostBridge 一致：宿主机地址已从
+      # macvlan shim 搬到桥上，漏改会静默挡住 Samba/NFS/WebDAV 等一批服务。
+      interfaces.br-lan = {
         allowedTCPPorts = [
           22      # SSH
           139 445 # Samba

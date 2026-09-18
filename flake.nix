@@ -19,13 +19,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # YunShu 透明网关容器（main-router 由它的 container 模块构建）。
+    # 路由器容器：网卡/桥、NAT、DHCP/DNS，VPN 以契约方式接入。
     #
-    # 用 github: 而不是 path:/git+file：后者只在本机有效，CI 和 NAS 都拉不到。
+    # 用 git+https 而不是 github: 简写：后者走 tarball 下载，国内会被截断。
     # 代价是**任何改动都必须 commit 并且 push**，否则别处拉到的还是旧版本
     # ——本机开发时这一点尤其容易忘，报错还常常是指向不明的"option 不存在"。
-    yunshu-container = {
-      url = "git+https://github.com/allenmagic/yunshu-container";
+    router-container = {
+      url = "git+https://github.com/allenmagic/router-container";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

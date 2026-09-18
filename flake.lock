@@ -124,8 +124,29 @@
         "nixpkgs": "nixpkgs",
         "qnap-kernel": "qnap-kernel",
         "qnap8528": "qnap8528_2",
-        "sops-nix": "sops-nix",
-        "yunshu-container": "yunshu-container"
+        "router-container": "router-container",
+        "sops-nix": "sops-nix"
+      }
+    },
+    "router-container": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "yunshu-nix": "yunshu-nix"
+      },
+      "locked": {
+        "lastModified": 1789712620,
+        "narHash": "sha256-8ahHn+rAosWpZgLeLR6+nSTcIwtBx34OkBPU92KNgjA=",
+        "ref": "refs/heads/main",
+        "rev": "1df799eda2155e7afce97afa6cb3682906434936",
+        "revCount": 4,
+        "type": "git",
+        "url": "https://github.com/allenmagic/router-container"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://github.com/allenmagic/router-container"
       }
     },
     "sops-nix": {
@@ -148,24 +169,25 @@
         "type": "github"
       }
     },
-    "yunshu-container": {
+    "yunshu-nix": {
       "inputs": {
         "nixpkgs": [
+          "router-container",
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1789690074,
-        "narHash": "sha256-HcIeDsBA3XNXbUe2DnZ9ObVz1c05AAjlGzpRcwFHk44=",
-        "ref": "refs/heads/main",
-        "rev": "b1bbd296292937d249ee341f5c1436d027a6cf37",
-        "revCount": 11,
-        "type": "git",
-        "url": "https://github.com/allenmagic/yunshu-container"
+        "lastModified": 1789403203,
+        "narHash": "sha256-y0kkeip+Xr0BimlVf1wYqgxJ7g+FGcDCTBVatqzuwTU=",
+        "owner": "allenmagic",
+        "repo": "yunshu-nix",
+        "rev": "ff2af6b269955a59114e59b605663bd91c420fe9",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "https://github.com/allenmagic/yunshu-container"
+        "owner": "allenmagic",
+        "repo": "yunshu-nix",
+        "type": "github"
       }
     }
   },

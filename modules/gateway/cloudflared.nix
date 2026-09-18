@@ -1,6 +1,6 @@
 # cloudflared —— 内网服务的内网穿透隧道（出站连接，无需入站放行）
 #
-#   lan0 ──> eth0   192.168.10.6/24   LAN（单口，出站直连）
+#   br-lan ──> host0   192.168.10.6/24   LAN（单口，出站直连）
 #
 # token 模式（ingress 在 Cloudflare 面板管理），因此不用 NixOS 的
 # services.cloudflared——那个模块只支持 credentials-file + 本地 ingress 配置。
@@ -12,7 +12,7 @@
 let
   lanIp = "192.168.10.6";
   gatewayIp = "192.168.10.1";
-  mac = "02:00:00:02:00:51";
+
 
   credDir = "/run/credentials/@system";
 in
@@ -20,7 +20,7 @@ in
   containers.cloudflared = {
     autoStart = true;
     privateNetwork = true;
-    macvlans = [ "lan0:eth0" ];
+    hostBridge = "br-lan";
 
     # token 从宿主 sops 解密后经 nspawn 注入，容器内不留任何持久副本
     extraFlags = [
@@ -31,13 +31,8 @@ in
       system.stateVersion = "26.05";
       networking.hostName = "cloudflared";
 
-      systemd.network.links."10-eth0" = {
-        matchConfig.Name = "eth0";
-        linkConfig.MACAddress = mac;
-      };
-
       networking = {
-        interfaces.eth0.ipv4.addresses = [
+        interfaces.host0.ipv4.addresses = [
           {
             address = lanIp;
             prefixLength = 24;
@@ -45,7 +40,7 @@ in
         ];
         defaultGateway = {
           address = gatewayIp;
-          interface = "eth0";
+          interface = "host0";
         };
         resolvconf.enable = false;
         # 隧道是纯出站的，不需要放行任何入站端口
