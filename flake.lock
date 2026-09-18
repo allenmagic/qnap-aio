@@ -136,11 +136,11 @@
         "yunshu-nix": "yunshu-nix"
       },
       "locked": {
-        "lastModified": 1789734418,
-        "narHash": "sha256-v1yT7T5nMcdxlNJ5uCgJK1//ILDc4SH+ek4UwTSy418=",
+        "lastModified": 1789740574,
+        "narHash": "sha256-ITUU86CFwVKEVAf/QE1SAQticWliPb3s/CBNckQKSBc=",
         "ref": "refs/heads/main",
-        "rev": "fac68fecc7e273ba09890e42c40225e8563cf71e",
-        "revCount": 11,
+        "rev": "6b627fbc72f7c5df633e6e75ac34b0a4cfa0fb8d",
+        "revCount": 13,
         "type": "git",
         "url": "https://github.com/allenmagic/router-container"
       },
