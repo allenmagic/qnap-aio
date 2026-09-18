@@ -66,17 +66,6 @@
                     { title = "WebDAV"; url = "http://192.168.10.2:4918"; icon = "mdi:folder-network"; alt-status-codes = [ 401 ]; }
                   ];
                 }
-                # 盯网关仓库的 CI 发布：出新版本时该在 NAS 上跑 nix flake update。
-                # qnap-aio 本身是宿主配置、不走 release；yunshu-container 是
-                # 网关容器的代码源，值得盯。想加别的仓库（含上游项目，
-                # 如 glanceapp/glance）说一声。
-                {
-                  type = "releases";
-                  title = "yunshu-container 发布";
-                  show-source-icon = true;
-                  repositories = [ "allenmagic/yunshu-container" ];
-                  collapse-after = 3;
-                }
               ];
             }
             # small 列固定 300px，full 列吃掉剩余宽度；每页最多 3 列且必须有
