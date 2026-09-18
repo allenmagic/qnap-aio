@@ -121,8 +121,8 @@ VMTEST
 }
 
 # ── 构建 ─────────────────────────────────────────────────────────────
-OVERRIDES="--override-input router-container path:/root/router-container
-           --override-input router-container/yunshu-nix path:/root/yunshu-nix"
+# 必须写成一行：换行插进远程命令会被 shell 当成另一条命令执行
+OVERRIDES="--override-input router-container path:/root/router-container --override-input router-container/yunshu-nix path:/root/yunshu-nix"
 
 do_build() {
   say "构建（用本地路径覆盖，不拉 GitHub）"
