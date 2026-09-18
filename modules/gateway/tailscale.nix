@@ -175,14 +175,16 @@ in
             sock=/run/headscale/tailscaled.sock
 
             # --auth-key 只用于首次注册；节点身份在 /var/lib/headscale 里持久，
-            # 之后重启不再需要它（但留着无害，重新注册时才用得上）
+            # 之后重启不再需要它（但留着无害，重新注册时才用得上）。
+            # ⚠️ netfilter-mode / accept-dns 必须写在 up 里，不能事后用 set 补：
+            #    节点上已经存在这两个非默认设置后，下次开机的 up 会因为
+            #    "requires mentioning all non-default flags" 直接报错退出。
             "$ts" --socket="$sock" up \
               --auth-key "$(cat ${credDir}/hs-authkey)" \
               --login-server=${hsControlUrl} \
               --hostname=${hsHostname} \
               --advertise-routes=${advertiseRoute} \
-              --accept-routes
-            "$ts" --socket="$sock" set \
+              --accept-routes \
               --netfilter-mode=off \
               --accept-dns=false
           '';
