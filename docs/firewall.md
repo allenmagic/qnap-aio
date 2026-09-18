@@ -9,11 +9,14 @@
 | 约束 | 后果 |
 |---|---|
 | XDP 没有 conntrack | 做不了有状态的 default deny——会把回包一起丢掉 |
-| macvlan 让容器间流量走内核内部软交换 | **宿主机看不见容器间流量**，XDP 更看不见 |
+| WAN 侧是 macvlan，容器间流量走内核内部软交换 | 宿主机看不见 WAN 侧的容器流量，XDP 也看不见 |
 | XDP 没有日志 | 丢包静默，排查难度远高于 nftables |
 
-换句话说：**宿主机已经从数据面上被摘出去了**（这是选 macvlan 换性能的代价），
-所以"唯一的策略点"这个目标不成立，只能分层。
+> **2026-09-18 更新**：LAN 侧已从 macvlan 改成 bridge（宿主地址在 `br-lan`），
+> 内网方向宿主机**看得见**了（`tcpdump -i br-lan`）。WAN 侧维持 macvlan，
+> 上面的第二条约束对 WAN 仍然成立。
+
+换句话说：**宿主机不在数据面上**，"唯一的策略点"这个目标不成立，只能分层。
 
 ## 1. 现状盘点
 
@@ -23,14 +26,15 @@
 |---|---|
 | `input` 链 policy drop + `ct state` | NixOS firewall 模块 |
 | `forward` 链 policy drop + `ct state` | `networking.firewall.filterForward = true` |
-| 每服务最小放行（DNS/DHCP/VRRP/隧道） | yunshu gateway 模块 + `side-router.nix` + `dnsmasq.nix` |
-| masquerade / DNS DNAT | 同上 |
-| **MSS clamping** | 本轮补上（`extraForwardRules`） |
-| 兜底日志 `limit rate N/minute log + drop` | ⚠️ **待补**：原 router-vm 有，新模块还没加 |
+| 每服务最小放行（DNS/DHCP/隧道）、MSS clamp、`iifname host0 accept` | `router-container/modules/container.nix` |
+| masquerade | `router-container/modules/guest/nat.nix` |
+| 客户端 DNS 监听（本机 dnsmasq） | `router-container/modules/guest/dns.nix` |
+| 兜底日志 `limit rate N/minute log + drop` | ⚠️ 目前没有——原 router-vm 有，迁移时加上又因噪音移除 |
 
 ### 宿主机
 
-**目前零过滤**。纯二层，不参与转发，nftables 也看不到 macvlan 流量。
+**目前零过滤**。不做三层转发；nftables 只看得到宿主机自己收发的流量
+（bridge 之下容器间流量宿主机能 `tcpdump` 看到，但不经过宿主的 nftables 链）。
 
 ## 2. 目标形态
 
@@ -84,7 +88,7 @@ int wan_filter(struct xdp_md *ctx) {
 - **默认 `PASS`**：不在这里做 default deny（见 §0）
 - **畸形包 `PASS`**：解析失败时交给内核栈判断，而不是自己丢——XDP 里写错
   裁剪逻辑静默丢合法包的风险，比放过去大
-- **不用 `XDP_REDIRECT`**：会把帧直接送到别的接口、绕过 macvlan 分发，容器就收不到了
+- **不用 `XDP_REDIRECT`**：会把帧直接送到别的接口、绕过 macvlan 分发，WAN 侧的容器就收不到了
 
 ### 3.2 构建与挂载
 
@@ -197,18 +201,19 @@ bpftool map dump name xdp_stats
 |---|---|
 | XDP 里做 default deny | 无 conntrack、会丢回包 |
 | XDP 里做 NAT / DNAT | XDP 改不了，也不该改 |
-| 用 `XDP_REDIRECT` | 绕过 macvlan 分发，容器收不到 |
+| 用 `XDP_REDIRECT` | 绕过 macvlan 分发，WAN 侧的容器收不到 |
 | 用 generic 模式跑生产 | 2.5G 线速下明显掉速 |
-| 把容器内 nftables 的策略上移到宿主机 | 容器间流量宿主机看不见，且策略会与它保护的容器脱节 |
+| 把容器内 nftables 的策略上移到宿主机 | 策略会与它保护的容器脱节（容器是策略的作用点），容器重建时宿主规则也不会跟着变 |
 
 ## 8. 待补的小项（不依赖 XDP）
 
-容器内 nftables 缺一条原 router-vm 有的兜底日志：
+容器内 nftables 目前没有原 router-vm 那条兜底日志：
 
 ```nix
-# 两个路由器的 extraForwardRules 末尾
+# router-container/modules/container.nix 的 extraForwardRules 末尾
 limit rate 10/minute log prefix "FORWARD_DROP: " drop
 ```
 
 它不改变任何放行行为（policy 本来就是 drop），只是让"什么被挡了"可见。
-在 XDP 没有日志的前提下，这条更值得补。
+迁移时加过一条，因为噪音（每次 drop 都记）又被移除——需要再开时把
+`limit rate` 收紧，别原样搬回来。

@@ -7,7 +7,8 @@
 
 - **声明式配置**: 所有配置通过 Nix 管理，可重现、可回滚
 - **QNAP 硬件支持**: 集成 qnap8528 内核模块，支持风扇控制、LED、温度传感器
-- **透明网关容器**: 策略分流 VPN + 高可用浮动网关（VRRP），宿主机保持纯二层
+- **单网关容器**: 策略分流 VPN（YunShu）+ NAT/DHCP/DNS 全在一个 nspawn 容器里，
+  LAN 走 bridge（宿主机能 `tcpdump` 到容器间流量），WAN 走 macvlan
 - **旁路服务**: Tailscale（官方 + 自建 headscale）、Cloudflare Tunnel 各自独立容器
 - **存储服务**: Samba、NFS、Syncthing、WebDAV、Navidrome
 - **下载与网盘**: qBittorrent、aria2、OpenList
@@ -43,49 +44,54 @@
 ├── modules/
 │   ├── system/                        # 基础系统配置（语言、软件包、Nix 设置）
 │   ├── hardware/                      # 硬件相关（风扇、传感器）
-│   ├── network/                       # 网络配置（物理口命名、macvlan shim、防火墙）
-│   ├── gateway/                       # 网关容器组（main/side/dnsmasq/tailscale/cloudflared）
+│   ├── network/                       # 物理口按 MAC 命名（links.nix）+ 宿主机防火墙端口表
+│   ├── gateway/                       # 网关容器组（main-router / tailscale / cloudflared）
 │   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList
 │   ├── security/                      # SSH、sops-nix
 │   └── users/                         # 用户配置
+├── scripts/
+│   ├── vm-test.sh                     # 本机 libvirt 测试 VM：装配 / 构建 / 部署 / 验证
+│   └── deploy-nas.sh                  # NAS 远端部署（含 bootctl 回滚保险）
 ├── secrets/
 │   ├── README.md                      # sops-nix 使用指南
 │   └── secrets.yaml                   # 加密的密钥文件（需手动创建）
+```
 
 ## 网关架构
 
-宿主机**纯二层**（不做转发），三层全部在 systemd-nspawn 容器里。没有虚拟机、
-没有网桥：容器用 macvlan 直接挂到物理口上。
+宿主机**不参与三层转发**，NAT / DHCP / DNS / VPN 分流全在 systemd-nspawn 容器里。
+**LAN 侧走 bridge**（宿主地址在 `br-lan`，看得见容器间流量），**WAN 侧走 macvlan**
+（nspawn 的 `--network-bridge` 只作用于 veth 那一个接口，容器只能有一个桥接口）。
 
 ```text
-上游光猫 ── wan ─┬─ main-router.eth1   (VRRP MASTER, YunShu 策略分流)
-                  └─ side-router.eth1   (VRRP BACKUP, 降级直连 NAT)
+上游光猫 ── wan ── macvlan ── main-router.eth1（自己向上游要 DHCP）
 
-内网 ───── lan ─┬─ main-router.eth0   .2
-                 ├─ side-router.eth0   .3   VRRP 浮动网关 .1
-                 ├─ tailscale.eth0     .4
-                 ├─ cloudflared.eth0   .6
-                 ├─ dnsmasq.eth0       .7   DHCP（option 3/6 都下发 .1）
-                 └─ 宿主机 mv-shim     .250 macvlan shim（管理通道）
+内网 ───── lan ──┬─ br-lan ─┬─ main-router.host0  .1   网关 + DHCP + DNS + YunShu 分流
+                 │          ├─ tailscale.host0    .4   双实例子网路由器
+                 │          ├─ cloudflared.host0  .6   Cloudflare 隧道回源
+                 │          └─ 宿主机             .2   br-lan 上的管理地址
+                 └─ macvlan ──── tailscale.eth1       自己的 WAN 出口（隧道不依赖网关）
+     内网设备 .100-.200（main-router 内的 dnsmasq 提供 DHCP）
 ```
 
 | 容器 | 职责 |
 |---|---|
-| `main-router` | 主透明网关，按商业 VPN 的策略路由分流（被墙域名走隧道） |
-| `side-router` | 备份直连网关，main 不可用时接管浮动网关，降级为纯直连 |
-| `dnsmasq` | 全网唯一 DHCP；降级态由 side-router 把 53 转发给它 |
+| `main-router` | 唯一网关：NAT、DHCP、本机 DNS、YunShu 策略分流（被墙域名走隧道） |
 | `tailscale` | 两个 tailscale 实例（官方控制面 + 自建 headscale），子网路由器 |
 | `cloudflared` | 内网服务的内网穿透隧道（token 模式，ingress 在 CF 面板管理） |
 
-**DNS 链路是这套设计的核心**：客户端 DNS 由 DHCP 下发为浮动网关 `.1`——main 持有 VIP 时
-由 YunShu 隧道 DNS 做 fake-IP 分流，漂到 side 时由 side 把 53 转给 dnsmasq。把客户端 DNS
-改成任何容器的固定地址都会让分流静默失效，不要那样改。
+**DNS 链路是这套设计的核心**：客户端 DNS 由 DHCP 下发为网关 `.1`，main-router 内的
+dnsmasq 按 `strict-order` 把上游排成「YunShu 隧道 DNS → 公网 DNS」——被墙域名拿到
+fake-IP（`198.18.0.0/15`，经隧道出去），境内域名拿真实 IP 直连。把客户端 DNS 改成
+别的地址（绕开网关）会让域名级分流静默失效，不要那样改。
 
-`main-router` 由独立仓库 [yunshu-container](https://github.com/allenmagic/yunshu-container)
-提供（本仓库通过 flake input 引用）。**改那个仓库必须 commit 且 push**，否则本仓库求值
-拉到的还是旧版本。
+`main-router` 由独立仓库 [router-container](https://github.com/allenmagic/router-container)
+提供，VPN 实现来自 [yunshu-nix](https://github.com/allenmagic/yunshu-nix)（本仓库通过
+flake input 引用）。**改这两个仓库必须 commit 且 push**，否则本仓库求值拉到的还是
+GitHub 上的旧版本。
 
-> 📐 设计取舍、实测的性能与资源对比、编址迁移清单见 [`docs/gateway.md`](docs/gateway.md)。
+> 📐 设计取舍与实测的性能/资源对比见 [`docs/gateway.md`](docs/gateway.md)。该文写于
+> 双网关/VRRP 时期，部分章节已过时，**以 `CLAUDE.md` 与 `modules/` 下的代码为准**。
 
 ## 快速开始
 
@@ -169,8 +175,9 @@ sudo nixos-rebuild switch --flake .#default
 由 sops-nix 加密存放，宿主解密后经 systemd-nspawn 的 `--load-credential` 注入容器，
 容器内不留副本。配置方法与验收步骤见 [INSTALL.md](INSTALL.md)。
 
-> ⚠️ **首次部署前必读**：接口改名与编址迁移都需要重启，且都可能让机器失联，
-> 操作顺序见 [`docs/gateway.md`](docs/gateway.md) 附录 A。
+> ⚠️ **首次部署前必读**：接口改名由 udev 在设备出现时处理，**必须重启才生效**，
+> 且可能让机器失联。远端部署用 [`scripts/deploy-nas.sh`](scripts/deploy-nas.sh)——
+> 它会把 bootctl 的默认启动项设成"当前正在跑的世代"作为回滚保险再重启。
 
 
 ## 日常使用
@@ -191,10 +198,10 @@ sudo nixos-rebuild switch --rollback
 ### 网关容器更新
 
 ```bash
-# 改容器代码（main-router 在 yunshu-container 仓库）：
-#   在那个仓库改完 → commit → push（本仓库通过 github: input 引用，
+# 改容器代码（main-router 在 router-container 仓库，VPN 实现在 yunshu-nix）：
+#   在那两个仓库改完 → commit → push（本仓库通过 git+https input 引用，
 #   没 push 的话这里拉到的还是旧版本）
-nix flake update yunshu-container
+nix flake update router-container
 sudo nixos-rebuild switch --flake .#default
 
 # 改宿主机侧的容器声明（modules/gateway/*.nix）：
@@ -205,10 +212,22 @@ sudo nixos-rebuild switch --flake .#default
 #   若改了别的密钥（无 restartUnits），需要手动重启对应服务。
 
 # 进容器排障
-sudo nixos-container run main-router -- systemctl status keepalived
 sudo nixos-container run main-router -- ip -br addr
 sudo nixos-container root-shell main-router        # 交互式
 ```
+
+### 部署到 NAS / 测试 VM
+
+```bash
+# 本机 libvirt 测试 VM（192.168.122.250）：装配 → 构建 → 部署 → 验证
+./scripts/vm-test.sh              # 也可 build / deploy / verify / status 分步跑
+
+# 生产 NAS：在 NAS 上以 root 跑（回滚保险 + 重启）
+ssh root@192.168.10.2 'bash /home/nas/qnap-aio-git/scripts/deploy-nas.sh'
+```
+
+> ⚠️ 部署会让机器重启，**动手前先确认远端有人/能到现场**。测试 VM 能验机制
+> （接口/地址/桥/容器启动），验不了内核相关项与 YunShu 分流（VM 里没有登录态）。
 
 ### 服务管理
 
@@ -223,7 +242,7 @@ systemctl status navidrome
 
 # 网关容器（NixOS 容器统一是 container@<名字>.service）
 systemctl status container@main-router
-systemctl status container@dnsmasq
+systemctl status container@tailscale
 
 # 重启
 sudo systemctl restart samba
@@ -249,17 +268,18 @@ btrfs device stats /srv/data
 
 ### 修改网络 IP
 
-网段散落在十几处，改之前先读 `docs/gateway.md` 附录 A（有一份完整清单）。
-至少包括：
+网段散落在十几处，至少包括：
 
-- `modules/network/shim.nix`：宿主机的地址/网关/DNS
+- `modules/gateway/main-router.nix`：`router.*` —— 宿主地址与默认网关（`bridge.nix` 读它）、
+  容器地址（`router.address`）、DHCP 池与 option 3/6/28、固定 MAC
+- `modules/network/links.nix`：物理口按 MAC 锚定命名（`wan` / `lan`）
 - `modules/network/default.nix`：防火墙端口表（**按接口名匹配**，接口名改了这张表也要改）
-- `modules/gateway/*.nix`：各容器的地址、DHCP option 3/6、VRRP 单播地址
 - 各服务的绑定地址：`samba.nix` / `nfs.nix` / `syncthing.nix` / `webdav.nix` /
   `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix`
+- `modules/gateway/tailscale.nix`：容器地址、广告的网段
 - `modules/security/ssh.nix` 的 `Match Address`
 
-> ⚠️ 浮动网关 VIP 同时是 DHCP 下发的默认网关与 DNS，改它等于改所有下游设备的配置。
+> ⚠️ 网关 `.1` 同时是 DHCP 下发的默认网关与 DNS，改它等于改所有下游设备的配置。
 
 ### 添加 Samba 共享
 
@@ -290,15 +310,15 @@ cd /etc/nixos && git pull            # 或本仓库所在路径
 sudo nixos-rebuild switch --flake .#default
 ```
 
-内网访问：`http://192.168.10.2:4918`（端口仅对内网 mv-shim 放行）。
+内网访问：`http://192.168.10.2:4918`（端口仅对内网 `br-lan` 放行）。
 
-**公网访问（Cloudflare Tunnel）**：隧道在路由 VM 内以 token 托管模式运行——
+**公网访问（Cloudflare Tunnel）**：隧道在 `cloudflared` 容器里以 token 托管模式运行——
 `/etc/cloudflared/config.yml` 只有 token，**ingress 规则在 Cloudflare 面板配置**，
 不在本仓库：
 
 > Zero Trust → Networks → Tunnels → 对应隧道 → Public Hostnames → Add
 > - Subdomain/Domain：如 `webdav.zyx1986.icu`
-> - Service：`HTTP` → `192.168.10.2:4918`（路由 VM 与 NAS 同桥，可直连）
+> - Service：`HTTP` → `192.168.10.2:4918`（cloudflared 容器与 NAS 同桥，可直连）
 
 回源是内网明文 HTTP（仅内网一跳），公网侧由 Cloudflare 边缘自动 HTTPS，
 NAS 上无需证书。`behindProxy = true` 让日志按 `X-Forwarded-For` 记录真实客户端 IP。
@@ -383,19 +403,25 @@ btrfs filesystem show
 
 ```bash
 # 宿主机侧接口
-ip -br addr                      # 应有 mv-shim 192.168.10.2/24
+ip -br addr                      # 应有 br-lan 192.168.10.2/24
 ip -br link                      # wan / lan 应为 UP
 
-# 浮动网关在谁手里
-sudo nixos-container run main-router -- ip -br addr show eth0
-sudo nixos-container run side-router -- ip -br addr show eth0
+# 网关地址在容器里（host0=.1，eth1=上游 DHCP 拿到的地址）
+sudo nixos-container run main-router -- ip -br addr
 
-# VRRP 心跳（两个容器应互相看得到对方）
-sudo nixos-container run main-router -- tcpdump -i eth0 -n proto 112
+# ★ bridge 改造的主要收益：宿主机看得见容器间/容器到外网的流量
+sudo tcpdump -i br-lan -n
 
-# 连通性
-ping 192.168.10.1                # 浮动网关
-sudo nixos-container run dnsmasq -- journalctl -u dnsmasq -n 50
+# DHCP 租约
+sudo nixos-container run main-router -- cat /var/lib/dnsmasq/dnsmasq.leases
+
+# 连通性与分流
+ping 192.168.10.1                       # 网关
+dig @192.168.10.1 www.google.com        # 应得 fake-IP（198.18/15）
+dig @192.168.10.1 www.baidu.com         # 应得真实 IP
+
+# 容器自己的 journal（宿主 journal 只转发 console，会断）
+journalctl -D /var/lib/nixos-containers/main-router/var/log/journal -b
 
 # 进容器
 sudo nixos-container root-shell main-router
@@ -409,14 +435,16 @@ sudo nixos-container root-shell main-router
 - **容器而非虚拟机**：网关全部是 systemd-nspawn 容器，共享宿主内核，没有 guest 内核、
   没有 qcow2 镜像副本、没有 isolcpus 独占核（实测对比见 `docs/gateway.md` §4.1）。
   改造前是 cloud-hypervisor MicroVM 方案。
-- **macvlan 而非桥接**：容器直接拿到物理口的子接口，宿主机不进数据面。
-  宿主机自己用一个 macvlan shim 保留管理通道。
-- **浮动网关 + 双角色 DNS**：VIP 是下游唯一感知的网关；DNS 跟着 VIP 走——
-  main 持有时分流，漂到 side 时降级为直连解析。这是"客户端 DNS 必须经过网关"的必然结果。
-- **职责拆分成多个容器**：网关、DNS、隧道、穿透各自独立，互不牵连；
+- **LAN 走 bridge、WAN 走 macvlan**：bridge 下宿主机看得见容器间流量（排障时
+  `tcpdump -i br-lan` 就是第一手证据）、跨容器 DNAT 可用、carrier 不必等父口；
+  WAN 侧维持 macvlan 是因为 nspawn 只允许一个桥接口，且它本来也没出过问题。
+- **单网关，不做 VRRP 漂移**：只有 main-router 持 `.1`。用隧道健康度驱动 VIP 漂移
+  本身是故障源——抢到 VIP 的那台若隧道没连上，全网 DNS 直接黑洞（见 `docs/gateway.md` 开头）。
+- **职责拆分成多个容器**：网关、隧道、穿透各自独立，互不牵连；
   tailscale 的两个实例则合并进一个容器（同一类东西，拆开只是多付一份开销）。
 - **模块化**：每个功能独立一个模块文件（`modules/`）；main-router 的实现在
-  [yunshu-container](https://github.com/allenmagic/yunshu-container) 仓库。
+  [router-container](https://github.com/allenmagic/router-container) 仓库，
+  VPN 实现在 [yunshu-nix](https://github.com/allenmagic/yunshu-nix)（以契约接入）。
 
 ## 参考文档
 

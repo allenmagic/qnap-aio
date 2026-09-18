@@ -29,20 +29,17 @@
   │
   │ wan（原 enp2s0，宿主机不配 IP）
   ▼
-  ├── main-router 容器 eth1   VRRP MASTER，策略分流
-  └── side-router 容器 eth1   VRRP BACKUP，降级直连
+  └── main-router 容器 eth1（macvlan，自己向上游要 DHCP）
 
 内网
   │
-  │ lan（原 enp3s0，宿主机不配 IP）
+  │ lan（原 enp3s0，宿主机不配 IP，只做 br-lan 的二层端口）
   ▼
-  ├── main-router.eth0  .2 ┐
-  ├── side-router.eth0  .3 ├─ VRRP 浮动网关 .1（下游的默认网关与 DNS）
-  ├── tailscale.eth0    .4 │
-  ├── cloudflared.eth0  .6 │
-  ├── dnsmasq.eth0      .7 ┘  DHCP 服务器
-  └── 宿主机 mv-shim    .250（macvlan shim，管理通道）
-     内网设备 .100-.200（dnsmasq 提供 DHCP）
+  └── br-lan ┬── main-router.host0  .1   唯一网关 + DHCP + DNS（option 3/6 都下发 .1）
+             ├── tailscale.host0    .4   子网路由器（另有自己的 WAN 出口）
+             ├── cloudflared.host0  .6
+             └── 宿主机             .2   管理地址（SSH/NFS/Samba 都绑它）
+     内网设备 .100-.200（main-router 内的 dnsmasq 提供 DHCP）
 ```
 
 > ⚠️ 接口名 `wan`/`lan` 是**按 MAC 锚定**的（`modules/network/links.nix`），
@@ -122,9 +119,9 @@ btrfs subvolume create /mnt/data/state
 umount /mnt/data
 ```
 
-子卷挂在 `/srv/state`，专门放容器状态（tailscale 节点身份、dnsmasq 租约库）。
-用独立子卷是为了让状态**不在 NFS/Samba 导出范围内**——放 `/srv/data` 里的话，
-客户端能在共享里看到这些目录，只靠权限位挡着。
+子卷挂在 `/srv/state`，专门放容器状态（tailscale 节点身份、dnsmasq 租约库、
+YunShu 登录态）。用独立子卷是为了让状态**不在 NFS/Samba 导出范围内**——放
+`/srv/data` 里的话，客户端能在共享里看到这些目录，只靠权限位挡着。
 
 ### 2.3 缓存盘与备份盘
 
@@ -197,8 +194,8 @@ reboot
 
 ## 4. 首次启动与基础配置
 
-> ⚠️ **此时内网上还没有 DHCP 和网关**（dnsmasq 容器还没起来）。NAS 自身也没有外网
-> ——它的默认路由指向浮动网关 `.1`，而 `.1` 要等 main-router 或 side-router 接管。
+> ⚠️ **此时内网上还没有 DHCP 和网关**（main-router 容器还没起来）。NAS 自身也没有
+> 外网——它的默认路由指向网关 `.1`，而 `.1` 要等 main-router 起来才有。
 
 **登录方式（二选一）**：
 
@@ -247,31 +244,25 @@ sudo nixos-rebuild switch --flake .#default
 sudo reboot
 ```
 
-重启后五个容器自动启动。验证：
+重启后三个容器自动启动。验证：
 
 ```bash
-# 接口名已切换（应看到 wan / lan / mv-shim，不再是 enp2s0/enp3s0）
+# 接口名已切换（应看到 wan / lan / br-lan，不再是 enp2s0/enp3s0）
 ip -br link
 
-# 宿主机自己的地址与路由
-ip -br addr show mv-shim                   # 应有 192.168.10.2/24
+# 宿主机自己的地址与路由（地址在桥上，不再是 macvlan shim）
+ip -br addr show br-lan                    # 应有 192.168.10.2/24
 ip route                                   # 默认路由应指向 192.168.10.1
 
-# 五个容器都起来了
+# 三个容器都起来了
 systemctl list-units 'container@*'
 
-# 浮动网关在 main-router 手里（正常态）
-sudo nixos-container run main-router -- ip -br addr show eth0   # 应有 .2 与 .1
-
-# side-router 待命
-sudo nixos-container run side-router -- systemctl status keepalived
+# 网关在 main-router 里：host0=.1，eth1=上游 DHCP 拿到的地址
+sudo nixos-container run main-router -- ip -br addr
 
 # 下游能拿到地址（笔记本改成 DHCP 后）
 ping -c 3 192.168.10.1
 ```
-
-> ⚠️ WAN 侧第一次起会有两个容器同时要 DHCP 租约（改造前只有一个 VM 在拨号）。
-> 上游只允许单客户端时需要改用串行方案，见 `docs/gateway.md` §15.2。
 
 ## 6. 配置密钥（sops-nix）
 
@@ -304,7 +295,7 @@ sudo nixos-rebuild switch --flake .#default
 两个实例都由各自的 `tailscale up` 自动登录（authkey 从凭据目录读取）。
 
 **key 建议用「可复用（Reusable）」类型**：节点身份虽然持久化在
-`/srv/data/tailscale/`，但容器重建或状态盘丢失时会重新注册，一次性 key
+`/srv/state/tailscale/`，但容器重建或状态盘丢失时会重新注册，一次性 key
 第二次就失效。子网路由（`192.168.10.0/24`）需要在 Tailscale admin 与
 Headscale 侧分别 approve。
 
@@ -318,17 +309,18 @@ sudo nixos-container run tailscale -- tailscale --socket=/run/headscale/tailscal
 **容器内部**：
 
 ```bash
-# main-router：分流与 VRRP
-sudo nixos-container run main-router -- ip -br addr        # eth0=.2 + .1(VIP)，eth1=DHCP
+# main-router：网关地址、NAT/DNS/DHCP
+sudo nixos-container run main-router -- ip -br addr        # host0=.1，eth1=上游 DHCP
 sudo nixos-container run main-router -- nft list ruleset | head
-sudo nixos-container run main-router -- systemctl status keepalived
+sudo nixos-container run main-router -- systemctl status dnsmasq
 
-# dnsmasq：DHCP 与租约
-sudo nixos-container run dnsmasq -- cat /var/lib/dnsmasq/dnsmasq.leases
+# DHCP 租约
+sudo nixos-container run main-router -- cat /var/lib/dnsmasq/dnsmasq.leases
 
-# side-router：待命与 DNS 转发规则
-sudo nixos-container run side-router -- systemctl status keepalived
-sudo nixos-container run side-router -- nft list ruleset | grep -A3 prerouting
+# YunShu 登录与隧道状态（yunshu 不在宿主 PATH 上，进容器再跑）
+sudo nixos-container root-shell main-router
+#   yunshu -i                              # 连接状态（内网已连接 / 加速已连接）
+#   cat /var/lib/yunshu/login-www/status.json   # 登录状态
 ```
 
 **客户端验证**（笔记本从静态 IP 改回 DHCP，接内网口）：
@@ -336,33 +328,37 @@ sudo nixos-container run side-router -- nft list ruleset | grep -A3 prerouting
 ```bash
 ip a                       # 应拿到 192.168.10.100-200，网关 192.168.10.1，DNS 192.168.10.1
 ping -c 3 8.8.8.8          # 外网连通（经 main-router 的 NAT/分流）
-ping -c 3 192.168.10.2   # 内网到 NAS 连通
+ping -c 3 192.168.10.2     # 内网到 NAS 连通
+
+# 分流：被墙域名拿 fake-IP（198.18/15），境内域名拿真实 IP
+dig @192.168.10.1 www.google.com | grep -A1 ANSWER
+dig @192.168.10.1 www.baidu.com  | grep -A1 ANSWER
 ```
 
 > 测 DNS 分流前先 `systemctl stop nscd`：宿主机与容器都跑 nscd，
 > `getent`/`curl` 的解析会走 nscd 的 socket（由 nscd 在宿主命名空间里查），
 > 容易得出"分流生效"的假象。
 
-> 此时 NAS 宿主机也通过浮动网关获得了外网访问（默认路由指向 `.1`）。
+> 此时 NAS 宿主机也通过网关获得了外网访问（默认路由指向 `.1`）。
 
 ## 7. 收尾
 
 1. 浏览器访问 **http://192.168.10.2:8080**，用 `nas` 登录 Glance 仪表盘
    （系统没有 Cockpit，Web 管理走它；其余用 SSH）
 
-> ⚠️ **必须逐条验证的真机项**（这些在开发机上无法验证，只能上机确认）：
-> - macvlan 接口的 MAC 能否靠容器内 udev `.link` 固定住（`ip link` 看是否等于配置值）
-> - 两个容器的**单播 VRRP** 是否真能互通（`tcpdump -i eth0 -n proto 112`）
-> - dnsmasq 能否收到**广播** DHCP 请求（macvlan 下广播是否正常送达）
-> - WAN 侧上游是否接受两个容器各自的 DHCP 租约
-> - side-router 的 WAN 健康检查失败时是否真的进 FAULT（不会接管 VIP）
+> ⚠️ **只能上真机验证的项**（测试 VM 验不了，见 [TESTING.md](TESTING.md)）：
+> - WAN 侧上游是否接受多个 DHCP 租约（main-router 与 tailscale 各要一个，实测接受）
+> - YunShu 登录后的真分流行为（隧道、fake-IP 那条路需要登录态，VM 里没有）
+> - 隧道断开时 dnsmasq 的 `strict-order` 是否如预期回落到公网 DNS
+> - 桥改造后的真机表现（宿主 `tcpdump -i br-lan` 能否抓到容器流量）
 
 ## 8. 验收清单
 
 - [ ] 重启 NAS 后 Btrfs RAID1 数据卷自动挂载（`btrfs filesystem show` 显示两个成员）
-- [ ] 接口名已是 `wan`/`lan`（不再是 `enp2s0`/`enp3s0`），且 `mv-shim` 有 `192.168.10.2/24`
-- [ ] 五个容器全部 running（`systemctl list-units 'container@*'`）
-- [ ] 浮动网关 `.1` 在 main-router 的 eth0 上；停掉它之后漂移到 side-router
+- [ ] 接口名已是 `wan`/`lan`（不再是 `enp2s0`/`enp3s0`），且 `br-lan` 有 `192.168.10.2/24`
+- [ ] 三个容器全部 running（`systemctl list-units 'container@*'`）
+- [ ] 网关 `.1` 在 main-router 的 `host0` 上，且 `eth1` 从上游拿到了地址
+- [ ] 宿主 `tcpdump -i br-lan` 抓得到内网流量（bridge 改造的验收点）
 - [ ] 下游客户端自动获取 DHCP 地址，网关与 DNS 都是 `.1`
 - [ ] 被墙域名走隧道、境内直连（分流生效；测之前先 `systemctl stop nscd`）
 - [ ] Samba 共享可挂载（`\\192.168.10.2\data`，用户名 nas）
@@ -374,14 +370,12 @@ ping -c 3 192.168.10.2   # 内网到 NAS 连通
 
 | 项目 | 值 |
 |---|---|
-| 浮动网关 VIP（下游网关/DNS） | 192.168.10.1（VRRP，main-router 或 side-router 持有） |
-| main-router | 192.168.10.2 |
-| side-router | 192.168.10.3 |
+| 网关（下游的默认网关与 DNS） | 192.168.10.1（main-router 的 `host0`，由 DHCP 下发） |
+| NAS 宿主机 | 192.168.10.2（在 `br-lan` 上） |
 | tailscale 容器 | 192.168.10.4 |
 | cloudflared 容器 | 192.168.10.6 |
-| dnsmasq 容器 | 192.168.10.7 |
-| NAS 宿主机 | 192.168.10.2（mv-shim） |
-| DHCP 池 | 192.168.10.100 - 192.168.10.200（dnsmasq） |
+| 宿主 WAN/LAN 口 | `wan` / `lan`（只做二层，均不配 IP） |
+| DHCP 池 | 192.168.10.100 - 192.168.10.200（main-router 内的 dnsmasq） |
 | SSH | 22（内网与 Tailscale 可密码登录，其他来源仅密钥） |
 | Glance | 8080 |
 | Samba | 139/445 |
@@ -396,10 +390,11 @@ ping -c 3 192.168.10.2   # 内网到 NAS 连通
 |---|---|
 | 重启后数据卷未挂载 | `btrfs device scan && mount /srv/data`；确认 filesystem.nix 卷标与 `mkfs.btrfs -L` 一致 |
 | flake 报 not tracked by Git | `git add -N -f hardware-configuration.nix` |
-| 宿主完全没有网络 | `ip -br addr show mv-shim`；`ip link show lan`；若改名没生效说明没重启 |
+| 宿主完全没有网络 | `ip -br addr show br-lan`；`ip link show lan`；若改名没生效说明没重启 |
 | 容器起不来 | `journalctl -u container@<名字> -b`；多半是 bindMount 源目录不存在 |
-| 浮动网关没接管 | 两个容器各自 `ip -br addr`；`tcpdump -i eth0 -n proto 112` 看心跳是否互通（收不到 ⇒ 防火墙/接口名） |
-| DHCP 客户端拿不到地址 | dnsmasq 容器内 `systemctl status dnsmasq`、`cat /var/lib/dnsmasq/dnsmasq.leases`；确认 67/udp 已放行 |
+| 容器里看不到 journal | 读容器自己的：`journalctl -D /var/lib/nixos-containers/<名字>/var/log/journal -b`（宿主 journal 只有 console 转发，会断） |
+| 网关地址不在容器里 | `nixos-container run main-router -- ip -br addr`；`host0` 没有 `.1` 多半是 veth 改名失败 |
+| DHCP 客户端拿不到地址 | `nixos-container run main-router -- systemctl status dnsmasq`、`cat /var/lib/dnsmasq/dnsmasq.leases`；确认 67/udp 已放行 |
 | 外网不通但容器正常 | 容器内 `nft list ruleset` 看 masquerade 是否打在 WAN 口上、`ip route` 看默认路由 |
 | 分流失效（境内网站也走代理） | 先 `systemctl stop nscd` 再测；确认 DHCP 下发的 option 6 是 `.1` 而不是某个容器地址 |
 | 隧道容器登录失败 | `nixos-container run tailscale -- journalctl -u tailscaled -n 50`；确认密钥已注入且无尾换行 |

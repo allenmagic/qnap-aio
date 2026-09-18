@@ -9,8 +9,8 @@
 #    current：从 boot 菜单选旧条目启动**不会改 profile**，读 profile 会把保险
 #    设到上一版（可能同样是坏的）上，等于没保。2026-09-18 那次就踩了。
 #
-# 这次部署包含 LAN 从 macvlan 换成 bridge + 接口改名，是网络层的最大变化。
 # 回滚：重启时在 boot 菜单选旧条目，或进来后 nixos-rebuild switch --rollback。
+# 重启后的验收清单见 INSTALL.md 第 8 节。
 set -uo pipefail
 
 FLAKE=/home/nas/qnap-aio-git
@@ -76,7 +76,7 @@ echo "  新世代:   $NEW_GEN"
 echo
 echo "══════ 6. 设远程保险：默认=当前，oneshot=新世代 ══════"
 # 远端部署专用：新系统若起不来，断电重启会落回已知可用的旧世代。
-# 验证通过后再把默认切到新世代（见 verify-router.sh 末尾）。
+# 验证通过后再把默认切到新世代：bootctl set-default nixos-generation-<新世代>。
 bootctl set-oneshot "nixos-generation-$NEW_GEN" >/dev/null 2>&1 \
   && echo "  ✓ oneshot → nixos-generation-$NEW_GEN（只生效一次）" \
   || { echo "  ⚠ set-oneshot 失败 —— 那么新世代会成为默认，起不来就只能靠控制台"; }
@@ -89,7 +89,7 @@ bootctl status 2>/dev/null | grep -iE "^ *(Default|Boot|OneShot)" | head -5
 
 echo
 echo "  10 秒后重启（Ctrl-C 取消）"
-echo "  重启后：工作站上跑 verify-router.sh"
+echo "  重启后：按 INSTALL.md 第 8 节的验收清单验证"
 echo "  若彻底失联：让人断电重启 → 会自动回到 $CUR_GEN"
 sleep 10
 systemctl reboot

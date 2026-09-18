@@ -13,7 +13,7 @@ QNAP TS-564 的 NixOS 一体化网关宿主：**纯二层宿主机 + 一组 syst
 > `strict-order`：隧道 DNS → 公网 DNS），不再用跨容器 DNAT（实测不通）。
 > tailscale / cloudflared 保持独立容器。
 >
-> **`docs/gateway.md` 里 §7（VRRP/浮动网关）、§7.3/§7.4、附录 A 的编址部分已过时**，
+> **`docs/gateway.md` 是双网关/macvlan 时期的设计记录**（开头列了过时章节清单），
 > 只作历史参考，尚未重写。
 
 ## 常用命令
@@ -31,6 +31,17 @@ sudo nixos-rebuild switch --rollback
 
 sops secrets/secrets.yaml                         # 编辑加密密钥（需要 age 私钥）
 ```
+
+**部署与测试脚本**（`scripts/`）——改动**先过 VM 再上 NAS**：
+
+```bash
+./scripts/vm-test.sh          # 本机 libvirt VM：装配 + 构建 + 部署 + 验证
+./scripts/vm-test.sh build    # 只装配 + 构建（改完配置先跑这个）
+```
+
+- NAS 上跑 `bash scripts/deploy-nas.sh`（远端部署 + bootctl 回滚保险），细节见该脚本头部。
+- VM 能验接口/地址/桥/容器启动/状态挂载（**机制**），验不了内核相关项与 YunShu
+  分流（VM 里没有登录态）。2026-09-18 那次：四个 bug 里三个是 VM 拦下的。
 
 **flake.lock 已提交并锁定依赖**（nixos-26.05）。CI（`.github/workflows/`）在每次 push 跑
 `nix flake check` + 宿主机 dry-run build。
@@ -157,11 +168,11 @@ GitHub 上的旧版本——而报错常常是"option 不存在"这种指向不�
 4. 数据盘为 Btrfs 原生 RAID1（无 mdadm）：`mkfs.btrfs -m raid1 -d raid1 -L data`，挂载靠卷标，
    多设备由内核自动组装。
 5. `modules/security/sops.nix` 的 `defaultSopsFile` 是相对路径——移动该文件时同步改。
-6. **真机已实测确认的项**（2026-09-18）：WAN 侧上游接受多个 DHCP 客户端、
-   **YunShu 登录后 fake-IP 分流确实生效**（google 拿到 198.19.0.0，curl 返回 200）。
-   **未验证**：① 隧道断开时 `strict-order` 回落到公网 DNS 是否如预期（要主动停掉
-   yunshu-daemon 才能测）；② **bridge 改造后的真机表现**（桥可见性、跨容器通信）。
-   **README / INSTALL / TESTING 三份文档尚未跟上最近的几次改造**，以本文与代码为准。
+6. **真机已实测确认的项**（2026-09-18）：WAN 侧上游接受多个 DHCP 客户端；
+   YunShu 登录后 fake-IP 分流确实生效（google 拿到 `198.19.0.1`，curl 200）；
+   bridge 改造后宿主 `tcpdump -i br-lan` 抓得到容器流量；三个容器的 MAC 固定生效。
+   **未验证**：隧道断开时 `strict-order` 回落到公网 DNS 是否如预期
+   （要主动停掉 yunshu-daemon 才能测）。
 
 ## 代码风格
 

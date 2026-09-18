@@ -1,8 +1,14 @@
-# QEMU 测试机预演指南
+# 测试机预演指南
 
-在正式上 NAS 之前，先用本机的 QEMU/libvirt 测试机把部署流程走一遍。
+在正式上 NAS 之前，先用本机的 libvirt 测试机把部署流程走一遍。
+装配/构建/部署/验证都由 [`scripts/vm-test.sh`](scripts/vm-test.sh) 完成。
 
-验证目标：接口改名、编址迁移、五个网关容器启动、VRRP 主备、DHCP、降级 DNS。
+验证目标：接口改名、编址迁移、bridge 改造、三个网关容器启动、veth 改名与 MAC 固定。
+`vm-test.sh verify` 的判据就是这几条（宿主地址在 `br-lan`、`wan`/`lan` up、
+容器 running 且 `NRestarts=0`、`host0` 有 `.1` 且 MAC 是配置值、tailscale `.4`）。
+
+脚本没覆盖、需要手工看的：DHCP 租约、宿主 `tcpdump -i br-lan` 的可见性、
+启动排序（`journalctl -D /var/lib/nixos-containers/main-router/var/log/journal -b`）。
 
 ## ⚠️ 先读这条：测试机是 NAS 的完整克隆
 
@@ -10,7 +16,7 @@
 
 | 判据 | 真实 NAS | 测试机 |
 |---|---|---|
-| `uname -r` | `6.18.50-QNAP-TS-564` | `6.18.44`（通用内核） |
+| `uname -r` | `6.18.50-QNAP-TS-564` | 通用内核（如 `6.18.44`） |
 | `br-lan` MAC | `9e:c5:bf:66:75:55` | 由 virtio 网卡派生 |
 | uptime | 数天 | 测试期间会重启 |
 
@@ -40,13 +46,14 @@ virsh send-key   nixos-26.05 KEY_A           # 发送按键
 
 ### 访问方式二：网络（给 VM 加一个工作站够得到的地址）
 
-控制台里执行：
+从脚本或控制台补上保命地址：
 
 ```bash
-ip a a 192.168.122.250/24 dev br-lan        # 部署后会换成 mv-shim
+ip a a 192.168.122.250/24 dev br-lan
 ```
 
 然后从工作站 `ssh root@192.168.122.250` ✓（这条不碰生产网段）。
+脚本里的 `vm-test.nix` 已经把它做成开机自动加的 oneshot。
 
 测试机的 `/etc/ssh/sshd_config` 只放行 `192.168.10.0/24` 与 Tailscale 网段的密码登录，
 其它来源仅密钥——所以要么用密钥，要么从控制台补公钥：
@@ -56,66 +63,46 @@ mkdir -p /root/.ssh
 echo "ssh-ed25519 AAAA..." > /root/.ssh/authorized_keys
 ```
 
-## 测试机专属补丁（与正式配置的差异）
+## 跑一遍（推荐）
 
-放在 `/root/qnap-aio`（从工作站 scp 的工作树），**不进正式仓库**：
+```bash
+./scripts/vm-test.sh              # 装配 + 构建 + 部署 + 验证
+./scripts/vm-test.sh build        # 只装配 + 构建（改完配置先跑这个）
+./scripts/vm-test.sh deploy       # 只 boot + 重启
+./scripts/vm-test.sh verify       # 只验证（等 boot_id 变化后跑检查）
+./scripts/vm-test.sh status       # 看一眼 VM 现状
+```
 
-| 补丁 | 原因 |
+脚本处理了三个**踩过的坑**：
+
+| 坑 | 脚本的做法 |
 |---|---|
-| `flake.nix` 去掉 `qnap-kernel` / `qnap8528` 输入 | 测试机没有 qnap-kernel 的 Cachix 缓存，从源码编要一小时+；且与网络架构无关 |
-| `configuration.nix` 去掉 `hardware.qnap8528` | 没有 QNAP EC 硬件 |
-| 用测试机自己的 `hardware-configuration.nix` | 正式仓库那份占位模板的 initrd 只有 SATA/USB，**缺 `virtio_blk` 会开不了机** |
-| `flake.nix` 去掉 `./modules/services` | Samba/NFS/Syncthing/WebDAV/qBittorrent… 与网络测试无关，却把闭包撑到几 GB |
-| `.link` 的 MAC 改成 VM 两块网卡（`52:54:00:13:83:94` / `52:54:00:ae:56:87`） | 规则按生产 MAC 匹配，不改则 `wan`/`lan` 不会出现 |
-| 加 `vm-test.nix`：把 `192.168.122.250` 挂到 `mv-shim` | 保命地址——部署后 `br-lan` 被删、宿主机搬到 `.250`，不留这个地址就断线 |
+| **VM 拉不到 GitHub**。VM 是直连出口（自己那套配置没有 YunShu），`github.com` / cachix 都不通，而 flake input 默认走 `git+https` | 把 `router-container` / `yunshu-nix` 的源码 scp 进去，用 `--override-input path:` 覆盖 |
+| **三份 VM 专属文件不能被覆盖**：`configuration.nix`（去掉 qnap8528）、`vm-sops-stub.nix`（没有 age 私钥）、`hardware-configuration.nix`（真实 virtio 盘） | 装配时保留 VM 上的这三份；`flake.nix` 与 `vm-test.nix` 每次重写 |
+| **保命地址挂错接口**：bridge 改造后 `mv-shim` 不存在，`192.168.122.250` 必须挂 `br-lan`，否则失去 SSH 入口（只能 `virsh console`） | `vm-test.nix` 里挂 `br-lan` |
 
-生产与测试保留的模块：`system` / `network` / `gateway` / `security` / `users`。
+`vm-test.nix` 里另外两处覆盖：网卡 MAC 换成 VM 的两块 virtio（`52:54:00:13:83:94` /
+`52:54:00:ae:56:87`，生产 MAC 匹配不上就不会出现 `wan`/`lan`），宿主 DNS 指向
+libvirt 网关 `192.168.122.1`（不走隧道）。
 
 ## 测试局限
 
 **两块网卡都在同一个 virbr0 上**，所以 `wan`/`lan` 没有真正隔开。因此：
 
-- ❌ 测不了：上游是否接受两个 DHCP 客户端、WAN/LAN 隔离相关的行为
-- ✅ 能测：接口改名、macvlan 容器启动、容器内 MAC 固定、单播 VRRP、
-  广播 DHCP、side-router 的 WAN 健康检查进 FAULT
+- ❌ 测不了：上游是否接受多个 DHCP 租约、WAN/LAN 隔离相关的行为
+- ❌ 测不了：**内核相关项**。VM 用 nixpkgs 通用内核，不是 `qnap-kernel` 的裁剪内核
+  （缺 nftables 表达式模块那类问题在 VM 里永远复现不出来）
+- ❌ 测不了：**YunShu 分流**。VM 里没有登录态（也不该拷——同一账号两个会话可能把
+  生产那台踢掉），隧道与 fake-IP 那条路只能靠 NAS 验
+- ❌ 测不了：**子网路由**（需要控制面批准）
+- ✅ 能测：接口改名、bridge/编址、容器启动、容器内 veth 改名与 MAC 固定、DHCP、
+  状态挂载、启动排序
 
 要真隔离，得给测试机加一个 libvirt isolated 网络接到第二块网卡。
 
-## 步骤
-
-```bash
-# 1. 从工作站送代码进测试机（工作树，不含 .git；用 path: 引用使未跟踪文件也可见）
-tar czf /tmp/qnap-aio.tar.gz --exclude=.git --exclude=result -C ~/Projects/qnap-nas/qnap-aio .
-scp /tmp/qnap-aio.tar.gz root@192.168.122.250:/root/
-ssh root@192.168.122.250 'mkdir -p /root/qnap-aio && tar xzf /root/qnap-aio.tar.gz -C /root/qnap-aio'
-
-# 2. 应用上表的补丁（flake.nix / configuration.nix / hardware-configuration.nix / vm-test.nix）
-
-# 3. 先求值，再构建（只 build 不 switch）
-ssh root@192.168.122.250 'cd /root/qnap-aio && nix flake lock'
-ssh root@192.168.122.250 'cd /root/qnap-aio && nixos-rebuild build --flake .#default'
-
-# 4. 切换 + 重启（接口改名必须重启）
-ssh root@192.168.122.250 'cd /root/qnap-aio && nixos-rebuild switch --flake .#default && reboot'
-```
-
-## 重启后的验收
-
-```bash
-ip -br link                                   # 应出现 wan / lan / mv-shim
-ip -br addr show mv-shim                      # 192.168.10.2/24
-systemctl list-units 'container@*'            # 五个容器
-sudo nixos-container run main-router -- ip -br addr show eth0   # .2 + 浮动 .1
-sudo nixos-container run main-router -- ip link show eth0       # 核对 MAC 是否等于配置值
-sudo nixos-container run dnsmasq -- cat /var/lib/dnsmasq/dnsmasq.leases
-```
-
-**最不确定的一项**：容器内 macvlan 接口的 MAC 能否被 udev 的 `.link` 固定住。
-若不生效，退路是宿主侧 `ExecStartPost` 里 `nixos-container run ... ip link set`。
-
 ## 构建卡住时先看这条
 
-`/root/build.log` 里若出现大量：
+`/tmp/vm-build.log`（或 VM 上的 `/root/build.log`）里若出现大量：
 
 ```
 Operation too slow. Less than 1 bytes/sec transferred the last 300 seconds; retrying
