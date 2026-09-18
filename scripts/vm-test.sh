@@ -28,6 +28,10 @@ SSHOPT="-i $HOME/.ssh/id_ed25519_ssh -o BatchMode=yes -o ConnectTimeout=5 \
 SSH="ssh $SSHOPT root@$VM"
 SCP="scp $SSHOPT"
 REMOTE=/root/qnap-aio-vm
+# deploy 把"重启前的 boot_id"写在这里给 verify 读。不让 verify 自己现读——
+# VM 启动很快，deploy 与 verify 之间隔的那几秒够它重启完，verify 会把重启
+# **后**的 id 当成基线，然后干等 6 分钟（2026-09-18 踩过）。
+STATE=${TMPDIR:-/tmp}/vm-test-boot-id
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
@@ -134,18 +138,26 @@ do_build() {
 # ── 部署：boot + 重启 ────────────────────────────────────────────────
 do_deploy() {
   say "设为下次启动并重启"
+  timeout 10 $SSH 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null > "$STATE"
   # shellcheck disable=SC2086
   $SSH "cd $REMOTE && nixos-rebuild boot --flake .#default $OVERRIDES 2>&1 | tail -2; \
         sleep 6; systemctl reboot" || true
-  echo "  ✓ 已下发重启"
+  echo "  ✓ 已下发重启（重启前 boot_id: $(cut -c1-8 "$STATE" 2>/dev/null)）"
 }
 
 # ── 验证 ─────────────────────────────────────────────────────────────
 do_verify() {
   say "等待重启"
   local old new n=0
-  old=$(timeout 10 $SSH 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null)
-  vm_up || die "VM 当前不可达；用 virsh console $DOMAIN 看控制台"
+  if [ -s "$STATE" ]; then
+    # deploy 留下的基线，见 STATE 的注释。这时**不能**要求 VM 可达——
+    # 刚下发重启，它本来就正在关机/开机，直接判"不可达"会误杀。
+    old=$(cat "$STATE")
+  else
+    # 单独跑 verify（没有 deploy 的基线）：只能现读，读不到就是真不可达
+    old=$(timeout 10 $SSH 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null)
+    vm_up || die "VM 当前不可达；用 virsh console $DOMAIN 看控制台"
+  fi
   echo "  旧 boot_id: ${old:0:8}"
   while :; do
     n=$((n+1))
@@ -154,6 +166,7 @@ do_verify() {
     [ -n "$new" ] && [ "$new" != "$old" ] && { echo "  ✓ 已重启（${new:0:8}，$(($n*6))s）"; break; }
     sleep 6
   done
+  rm -f "$STATE"
   sleep 25
 
   local rc=0
