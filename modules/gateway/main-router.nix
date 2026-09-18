@@ -42,4 +42,37 @@
     # 和要注入容器的模块都在描述符里。
     vpn = inputs.router-container.vpns.yunshu;
   };
+
+  # 状态落数据盘。容器 /var 虽然默认持久（ephemeral = false），但那份落在
+  # 宿主根文件系统上；而 YunShu 登录态是要重走飞书 SSO 才拿得到的。
+  #
+  # ⚠️ 首次部署前必须先把旧位置的状态拷过来，否则会丢登录态（见下面注释）。
+  containers.main-router.bindMounts = {
+    "/var/lib/yunshu" = {
+      hostPath = "/srv/data/router/yunshu";
+      isReadOnly = false;
+    };
+    "/var/lib/dnsmasq" = {
+      hostPath = "/srv/state/router/dnsmasq";
+      isReadOnly = false;
+    };
+  };
+
+  # 目录必须先存在：bindMounts 的 hostPath 不存在时 nspawn 直接启动失败。
+  # 不用 tmpfiles——它在 sysinit 跑，与 /srv/data 挂载竞态，目录会被挂载点遮住
+  # （与 dnsmasq/tailscale 的状态目录同一个坑）。
+  systemd.services.router-state-dirs = {
+    description = "创建 router 容器的状态目录（须晚于 /srv/data 挂载）";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "container@main-router.service" ];
+    requiredBy = [ "container@main-router.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      install -d -m 755 /srv/data/router/yunshu
+      install -d -m 755 /srv/state/router/dnsmasq
+    '';
+  };
 }
