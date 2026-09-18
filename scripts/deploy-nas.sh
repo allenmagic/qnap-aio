@@ -38,7 +38,16 @@ echo "══════ 3. 拉取最新代码 ══════"
 cd "$FLAKE" || exit 1
 # 本机构建会把 flake.lock 改脏，先丢掉（权威版本在已推送的提交里）
 git checkout -- flake.lock 2>/dev/null || true
-git pull --rebase 2>&1 | tail -2 || { echo "✗ 拉取失败"; exit 1; }
+# NAS 连不上 github.com:443（GFW 拦），git pull 会卡两分多钟再失败。这时先在
+# 工作站把代码与 flake 输入送进来，再 QNAP_SKIP_PULL=1 跑本脚本：
+#   工作站: git bundle create /tmp/x.bundle <NAS当前HEAD>..main && scp /tmp/x.bundle root@nas:/tmp/
+#   工作站: nix copy --to ssh-ng://root@nas <新输入的 store path>
+#   NAS:    git fetch /tmp/x.bundle main:refs/remotes/origin/main && git reset --hard origin/main
+if [ "${QNAP_SKIP_PULL:-0}" = 1 ]; then
+  echo "  ⚠ QNAP_SKIP_PULL=1：跳过拉取（代码与输入须已由工作站送入）"
+else
+  git pull --rebase 2>&1 | tail -2 || { echo "✗ 拉取失败（NAS 连不上 GitHub 时见上面的注释）"; exit 1; }
+fi
 echo -n "  HEAD: "; git log --oneline -1
 
 echo
