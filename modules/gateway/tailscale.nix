@@ -15,7 +15,8 @@
 
 let
   lanIp = "192.168.10.4";
-  gatewayIp = "192.168.10.1";
+  # WAN 侧 macvlan 的 MAC：上游按 MAC 认租约，nspawn 每次重建都随机生成，必须固定
+  wanMac = "02:00:00:02:00:42";
 
 
   stateDir = "/srv/state/tailscale"; # data 卷的子卷，不在 NFS/Samba 导出内
@@ -52,6 +53,10 @@ in
     privateNetwork = true;
     enableTun = true;
     hostBridge = "br-lan";
+    # 自己在 WAN 上也要一个地址：让隧道**不依赖网关出网**。
+    # 网关挂掉时隧道仍在，从外面还能进内网修机器（内网设备的网关/DNS 此时都失效，
+    # 但 tailnet→内网的入站不经过网关，NAS 宿主机仍是可达的）。
+    macvlans = [ "wan:eth1" ];
 
     extraFlags = [
       "--load-credential=ts-authkey:${config.sops.secrets.tailscale-auth-key.path}"
@@ -74,6 +79,17 @@ in
       system.stateVersion = "26.05";
       networking.hostName = "tailscale";
 
+      systemd.services.fix-wan-mac = {
+        description = "固定 WAN 口 MAC（nspawn 每次重建都随机生成）";
+        before = [ "network-pre.target" ];
+        wantedBy = [ "network-pre.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        script = "${pkgs.iproute2}/bin/ip link set eth1 address ${wanMac}";
+      };
+
       networking = {
         interfaces.host0.ipv4.addresses = [
           {
@@ -81,10 +97,13 @@ in
             prefixLength = 24;
           }
         ];
-        defaultGateway = {
-          address = gatewayIp;
-          interface = "host0";
-        };
+
+        # 默认路由走**自己的 WAN 口**（DHCP 提供），不指向网关 .1：
+        # 这是本容器唯一依赖 .1 的地方，去掉之后网关故障不影响隧道存活。
+        # 内网不受影响——靠 host0 的直连路由。
+        interfaces.eth1.useDHCP = true;
+        # resolv.conf 下面写死了，禁止 dhcpcd 去写它（那是只读的 store 符号链接）
+        dhcpcd.extraConfig = "nohook resolv.conf";
         resolvconf.enable = false;
 
         firewall = {
