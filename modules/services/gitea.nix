@@ -5,7 +5,7 @@ let
   httpPort = 3000;
   sshPort = 2222;
   publicHost = "gitea.allenmagic.cn";
-  stateDir = "/srv/data/gitea";
+  stateDir = "/srv/data/application/gitea";
 
   adminUser = "nas";
   adminEmail = "nas@allenmagic.cn";

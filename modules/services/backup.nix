@@ -18,7 +18,7 @@ let
         # 自建 Git：仓库不可再生。注意这是对运行中的实例做 rsync，
         # sqlite 库有小概率读到不一致状态；要严格一致就用
         # services.gitea.dump 另行出归档。
-        { src = "/srv/data/gitea"; dst = "gitea"; }
+        { src = "/srv/data/application/gitea"; dst = "gitea"; }
       ];
     }
     {

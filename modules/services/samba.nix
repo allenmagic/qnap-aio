@@ -56,8 +56,11 @@ in
       };
 
       # 数据共享（主要存储）
+      # 指向 /srv/nfs/data 而不是 /srv/data：那里是「只含用户目录」的 bind 视图，
+      # 应用内部（application/、state 子卷）不在其中。force user=nas 意味着
+      # 凡是 nas 能读的都能被共享出去，所以隔离只能靠「不在共享路径下」。
       data = {
-        "path" = "/srv/data";
+        "path" = "/srv/nfs/data";
         "browseable" = "yes";
         "read only" = "no";
         "valid users" = "nas";

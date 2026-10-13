@@ -6,8 +6,8 @@
     enable = true;
     user = "nas";
     group = "nas";
-    dataDir = "/srv/data/syncthing";
-    configDir = "/srv/data/syncthing/.config";
+    dataDir = "/srv/data/application/syncthing";
+    configDir = "/srv/data/application/syncthing/.config";
 
     # 开放默认端口
     openDefaultPorts = true;
@@ -41,6 +41,6 @@
 
   # 确保数据目录存在且权限正确
   systemd.tmpfiles.rules = [
-    "d /srv/data/syncthing 0755 nas nas -"
+    "d /srv/data/application/syncthing 0755 nas nas -"
   ];
 }

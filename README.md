@@ -332,7 +332,7 @@ NAS 上无需证书。`behindProxy = true` 让日志按 `X-Forwarded-For` 记录
 
 ### Gitea（自建 Git 托管）
 
-`modules/services/gitea.nix`。数据（裸仓库 + sqlite 库 + LFS）全在 `/srv/data/gitea`
+`modules/services/gitea.nix`。数据（裸仓库 + sqlite 库 + LFS）全在 `/srv/data/application/gitea`
 （Btrfs RAID1），并已加入备份的 `nas` 任务。
 
 **首次启用**：管理员密码走 sops（明文），**必须先加密钥再 rebuild**——密钥不存在时
@@ -375,7 +375,7 @@ sudo systemctl restart gitea-admin-init
 ⚠️ 公网暴露注意：Cloudflare 免费版请求体上限 100MB，大仓库的 `git push` 会失败——
 大仓库仍应走内网或 Tailscale；同样建议加 Cloudflare Access 策略再加一道门。
 
-备份一致性：`/srv/data/gitea` 是按目录整体 rsync 的，sqlite 库在实例运行时有小概率
+备份一致性：`/srv/data/application/gitea` 是按目录整体 rsync 的，sqlite 库在实例运行时有小概率
 被读到不一致状态。仓库本身（松散对象与 pack）的写入是"写完再改名"，风险低。若要求
 数据库绝对一致，改用 `services.gitea.dump`（模块自带，另出一份归档，与目录备份并行）。
 
