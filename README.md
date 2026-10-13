@@ -381,9 +381,10 @@ sudo systemctl restart gitea-admin-init
 
 ### Glance 仪表盘
 
-`modules/services/glance.nix`（glanceapp/glance）是内网起始页：`bookmarks` widget
-汇总本机各 Web 服务入口（Feishin / gonic / Syncthing / Beszel / WebDAV），另有
-时钟、天气（Beijing）、服务器状态。
+`modules/services/glance.nix`（glanceapp/glance）是内网起始页：`monitor` widget
+汇总本机各 Web 服务入口（Glance / qBittorrent / AriaNg / OpenList / Feishin /
+Navidrome / Syncthing / Beszel / WebDAV / Gitea），可点击跳转并显示在线状态，
+另有时钟、天气（Beijing）、服务器状态。
 
 内网访问：`http://192.168.10.2:8080`，登录用户 `nas`。
 
