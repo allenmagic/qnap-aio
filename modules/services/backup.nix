@@ -5,8 +5,7 @@ let
 
   # 备份盘按「备份对象」分顶层目录，日期快照放在各自目录下：
   #   <backupDir>/<job>/<YYYY-MM-DD>/…
-  # 脚本只遍历这张表：盘上其它目录（比如 PVE 自己写的 pve/）不读不写，
-  # 过期清理也就不会误删外来备份。
+  # 脚本只遍历这张表：盘上其它目录一律不读不写，过期清理也就不会误删外来内容。
   # 成员 = { src 的内容镜像到快照里的 dst }；dst = "." 表示直接放进日期目录。
   jobs = [
     {
@@ -250,8 +249,6 @@ in
   systemd.tmpfiles.rules = [
     "d ${backupDir}/nas 0755 root root -"
     "d ${backupDir}/state 0755 root root -"
-    # pve/ 只是给 PVE 备份预留的场所，本服务不读不写；等接线时再定属主与权限
-    "d ${backupDir}/pve 0755 root root -"
   ];
 
   systemd.services.backup = {
