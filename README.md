@@ -346,7 +346,17 @@ sudo nixos-rebuild switch --flake .#default
 
 模块的 `gitea-admin-init` oneshot 用它创建管理员 `nas`（已存在则改密码），
 **只在 sops 值变化时动作**——`change-password` 会让已登录会话失效。
-`DISABLE_REGISTRATION = true`，建号只能由管理员操作；忘记密码就改 sops 里的值再 switch。
+`DISABLE_REGISTRATION = true`，建号只能由管理员操作。
+
+⚠️ **改密码要手动重跑 oneshot**：`nixos-rebuild switch` 只会重写 `/run/secrets`，
+而这个 oneshot 在开机时才跑（不在密钥的 `restartUnits` 里——加了的话首次部署时激活
+脚本会去重启一个依赖 gitea.service 的 unit，而那时 gitea 还没起来）。所以：
+
+```bash
+# 改完 sops 里的 gitea-admin-password 之后
+sudo nixos-rebuild switch --flake .#default
+sudo systemctl restart gitea-admin-init
+```
 
 - 内网 Web：`http://192.168.10.2:3000`
 - 内网 SSH 克隆：`ssh://git@192.168.10.2:2222/<用户>/<仓库>.git`
