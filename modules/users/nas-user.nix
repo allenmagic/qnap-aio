@@ -30,6 +30,7 @@
       "wheel"      # sudo 权限
       "storage"    # 存储访问
       "aria2"      # services/aria2.nix 用独立 aria2 用户跑，加组才能读写它的下载目录
+      "gitea"      # 只读浏览 /srv/data/gitea（该目录 0750 gitea:gitea，组内可进可读不可写）
     ];
 
     # SSH 公钥（替换为你的实际公钥）
