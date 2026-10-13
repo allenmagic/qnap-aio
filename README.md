@@ -12,6 +12,7 @@
 - **旁路服务**: Tailscale（官方 + 自建 headscale）、Cloudflare Tunnel 各自独立容器
 - **存储服务**: Samba、NFS、Syncthing、WebDAV、Navidrome
 - **下载与网盘**: qBittorrent、aria2、OpenList
+- **自建 Git**: Gitea（内网 HTTP/SSH + 公网经 Cloudflare 隧道）
 - **仪表盘**: Glance 起始页，汇总各服务入口，自带登录认证
 - **安全管理**: sops-nix 加密密钥管理、SSH 密钥认证
 - **自动化维护**: 定期垃圾回收、SMART 监控、SSD Trim
@@ -46,7 +47,7 @@
 │   ├── hardware/                      # 硬件相关（风扇、传感器）
 │   ├── network/                       # 物理口按 MAC 命名（links.nix）+ 宿主机防火墙端口表
 │   ├── gateway/                       # 网关容器组（main-router / tailscale / cloudflared）
-│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList
+│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea
 │   ├── security/                      # SSH、sops-nix
 │   └── users/                         # 用户配置
 ├── scripts/
@@ -328,6 +329,45 @@ NAS 上无需证书。`behindProxy = true` 让日志按 `X-Forwarded-For` 记录
   大文件同步仍应走内网或 Tailscale。
 - 强烈建议在同一面板加 **Cloudflare Access** 策略（邮箱 OTP 等），在 WebDAV 认证之外
   再加一道门，避免只靠用户名密码扛公网扫描。
+
+### Gitea（自建 Git 托管）
+
+`modules/services/gitea.nix`。数据（裸仓库 + sqlite 库 + LFS）全在 `/srv/data/gitea`
+（Btrfs RAID1），并已加入备份的 `nas` 任务。
+
+**首次启用**：管理员密码走 sops（明文），**必须先加密钥再 rebuild**——密钥不存在时
+`sops-nix` 的激活脚本会失败，整个 switch 会失败：
+
+```bash
+sops -k /var/lib/sops-nix/key.txt set secrets/secrets.yaml \
+  gitea-admin-password '<足够强的密码>'
+sudo nixos-rebuild switch --flake .#default
+```
+
+模块的 `gitea-admin-init` oneshot 用它创建管理员 `nas`（已存在则改密码），
+**只在 sops 值变化时动作**——`change-password` 会让已登录会话失效。
+`DISABLE_REGISTRATION = true`，建号只能由管理员操作；忘记密码就改 sops 里的值再 switch。
+
+- 内网 Web：`http://192.168.10.2:3000`
+- 内网 SSH 克隆：`ssh://git@192.168.10.2:2222/<用户>/<仓库>.git`
+- 公网 Web：`https://gitea.allenmagic.cn`（Cloudflare 隧道）
+
+**公网访问（Cloudflare Tunnel）**：同 WebDAV，ingress 在面板配置，不在本仓库：
+
+> Zero Trust → Networks → Tunnels → 对应隧道 → Public Hostnames → Add
+> - Subdomain/Domain：`gitea.allenmagic.cn`
+> - Service：`HTTP` → `192.168.10.2:3000`
+
+⚠️ **SSH 克隆只能在局域网用**：隧道只代理 HTTP，不代理 TCP。因此 `SSH_DOMAIN` 被显式
+钉在 `192.168.10.2`——若让它跟随 `DOMAIN`，界面会给出 `ssh://git@gitea.allenmagic.cn:2222`
+这种公网根本连不上的地址。Gitea 用**自带的 SSH 服务**（2222），宿主 sshd 不受影响。
+
+⚠️ 公网暴露注意：Cloudflare 免费版请求体上限 100MB，大仓库的 `git push` 会失败——
+大仓库仍应走内网或 Tailscale；同样建议加 Cloudflare Access 策略再加一道门。
+
+备份一致性：`/srv/data/gitea` 是按目录整体 rsync 的，sqlite 库在实例运行时有小概率
+被读到不一致状态。仓库本身（松散对象与 pack）的写入是"写完再改名"，风险低。若要求
+数据库绝对一致，改用 `services.gitea.dump`（模块自带，另出一份归档，与目录备份并行）。
 
 ### Glance 仪表盘
 

@@ -158,6 +158,16 @@
         owner = "root";
         mode = "0400";
       };
+
+      # Gitea 管理员账号（nas）的初始密码（明文）。services/gitea.nix 的
+      # gitea-admin-init oneshot 用它建号；值没变则不重设（change-password
+      # 会让已登录会话失效）。同上走 LoadCredential，故 owner=root——
+      # 直接以 gitea 身份读 /run/secrets 会依赖 sops 激活脚本与系统用户
+      # 创建的先后顺序，不可靠。
+      gitea-admin-password = {
+        owner = "root";
+        mode = "0400";
+      };
     };
   };
 }

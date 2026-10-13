@@ -9,6 +9,7 @@ let
   # 大概率不再触发，但保留排序没有代价。
   bindToShim = [
     "aria2"
+    "gitea"
     "glance"
     "navidrome"
     "openlist"
@@ -37,6 +38,8 @@ in
     # 网盘聚合（百度/阿里/夸克/GDrive）：Web UI + WebDAV
     ./openlist.nix
     ./webdav.nix
+    # 自建 Git 托管：内网 HTTP + 公网经 cloudflared 隧道
+    ./gitea.nix
     # cockpit 已删除（含其 9090 端口放行）：系统 Web 管理改用 SSH +
     # services/glance.nix 的仪表盘
     # YunShu 透明网关已移出 services/：容器化后归到

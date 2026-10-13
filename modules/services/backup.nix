@@ -15,6 +15,10 @@ let
         { src = "/srv/data/music"; dst = "music"; }
         { src = "/srv/data/photos"; dst = "photos"; }
         { src = "/srv/data/webdav"; dst = "webdav"; }
+        # 自建 Git：仓库不可再生。注意这是对运行中的实例做 rsync，
+        # sqlite 库有小概率读到不一致状态；要严格一致就用
+        # services.gitea.dump 另行出归档。
+        { src = "/srv/data/gitea"; dst = "gitea"; }
       ];
     }
     {

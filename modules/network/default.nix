@@ -41,6 +41,8 @@
           6800    # aria2 JSON-RPC（AriaNg 页面从浏览器直连它）
           6880    # AriaNg 静态页（nginx）
           5244    # OpenList Web UI / WebDAV（services/openlist.nix）
+          3000    # Gitea Web UI（公网经 cloudflared 隧道回源）
+          2222    # Gitea 自带 SSH 服务（仅内网：隧道只代理 HTTP，不代理 TCP）
         ];
         allowedUDPPorts = [
           137 138 # Samba (NetBIOS)
