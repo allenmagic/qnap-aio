@@ -20,7 +20,7 @@
 
 - 你的 SSH 公钥（写入 `modules/users/nas-user.nix`）
 - 规划好的密码：root 密码（仅控制台）、nas 系统密码（sudo/SSH 密码登录用）、Samba 密码
-- 三个网关密钥：Tailscale authkey、Headscale authkey、Cloudflare Tunnel token
+- 四个网关密钥：Tailscale authkey、Headscale authkey、Cloudflare Tunnel token、Cloudflare Mesh 节点 token
 
 **网络规划**
 
@@ -37,6 +37,7 @@
   ▼
   └── br-lan ┬── main-router.lan     .1   唯一网关 + DHCP + DNS（option 3/6 都下发 .1）
              ├── tailscale.lan      .4   子网路由器（另有自己的 WAN 出口）
+             ├── cloudflare-mesh.lan .5  Cloudflare Mesh 节点
              ├── cloudflared.lan    .6
              └── 宿主机             .2   管理地址（SSH/NFS/Samba 都绑它）
      内网设备 .100-.200（main-router 内的 dnsmasq 提供 DHCP）
@@ -280,13 +281,14 @@ sudo age-keygen -o /var/lib/sops-nix/key.txt
 #      tailscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx
 #      headscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx
 #      cloudflared-token:  eyJhIjoi...
+#      cloudflare-mesh-token: eyJhIjoi...
 cd secrets && sops -e secrets.yaml  # 或 sops edit secrets.yaml 交互编辑
 
 # 3. 重建生效
 sudo nixos-rebuild switch --flake .#default
 ```
 
-> 密钥值**不要带尾换行**（`sops set` 容易带上）。当前三个消费方都是
+> 密钥值**不要带尾换行**（`sops set` 容易带上）。当前四个消费方都是
 > `$(cat ...)` 取值、命令替换会剥掉换行；换成直接把文件当 token 读的写法
 > 就会把换行一起送进去，认证失败且报错指向不明。
 
@@ -373,6 +375,7 @@ dig @192.168.10.1 www.baidu.com  | grep -A1 ANSWER
 | 网关（下游的默认网关与 DNS） | 192.168.10.1（main-router 的 `lan`，由 DHCP 下发） |
 | NAS 宿主机 | 192.168.10.2（在 `br-lan` 上） |
 | tailscale 容器 | 192.168.10.4 |
+| cloudflare-mesh 容器 | 192.168.10.5 |
 | cloudflared 容器 | 192.168.10.6 |
 | 宿主 WAN/LAN 口 | `wan` / `lan`（只做二层，均不配 IP） |
 | DHCP 池 | 192.168.10.100 - 192.168.10.200（main-router 内的 dnsmasq） |

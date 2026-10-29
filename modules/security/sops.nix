@@ -77,7 +77,7 @@
       #   mode = "0400";
       # };
 
-      # ── 网关容器的密钥（tailscale / headscale / cloudflared）────────
+      # ── 网关容器的密钥（tailscale / headscale / cloudflared / mesh）──
       #
       # 注入通道：宿主 sops 解密到 /run/secrets → systemd-nspawn 用
       # --load-credential 在容器启动时读入 → 容器内落在
@@ -91,7 +91,7 @@
       # /run/secrets，但 nspawn 只在容器启动时读一次凭据，不重启就永远
       # 用着旧值。列在这里的单元会在密钥内容变化时被重启。
       #
-      # ⚠️ 值不要带尾换行（`sops set` 容易带上）。当前三个消费方都是
+      # ⚠️ 值不要带尾换行（`sops set` 容易带上）。当前四个消费方都是
       # `$(cat ...)` 取值，命令替换会剥掉尾换行；换成直接把文件当 token 读
       # 的写法就会把换行一起送进去，认证失败且报错指向不明。
       #
@@ -99,6 +99,7 @@
       #   tailscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx
       #   headscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx（自建控制面 hs.zyx1986.icu）
       #   cloudflared-token: eyJhIjoi...
+      #   cloudflare-mesh-token: eyJhIjoi...（面板 Networking > Mesh > Add node）
       tailscale-auth-key = {
         owner = "root";
         mode = "0400";
@@ -113,6 +114,11 @@
         owner = "root";
         mode = "0400";
         restartUnits = [ "container@cloudflared" ];
+      };
+      cloudflare-mesh-token = {
+        owner = "root";
+        mode = "0400";
+        restartUnits = [ "container@cloudflare-mesh" ];
       };
 
       # Beszel agent 认证。内容来自 hub UI「Add System」给出的 SSH 公钥，

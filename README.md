@@ -9,7 +9,7 @@
 - **QNAP 硬件支持**: 集成 qnap8528 内核模块，支持风扇控制、LED、温度传感器
 - **单网关容器**: 策略分流 VPN（YunShu）+ NAT/DHCP/DNS 全在一个 nspawn 容器里，
   LAN 走 bridge（宿主机能 `tcpdump` 到容器间流量），WAN 走 macvlan
-- **旁路服务**: Tailscale（官方 + 自建 headscale）、Cloudflare Tunnel 各自独立容器
+- **旁路服务**: Tailscale（官方 + 自建 headscale）、Cloudflare Mesh、Cloudflare Tunnel 各自独立容器
 - **存储服务**: Samba、NFS、Syncthing、WebDAV、Navidrome
 - **下载与网盘**: qBittorrent、aria2、OpenList
 - **自建 Git**: Gitea（内网 HTTP/SSH + 公网经 Cloudflare 隧道）
@@ -46,7 +46,7 @@
 │   ├── system/                        # 基础系统配置（语言、软件包、Nix 设置）
 │   ├── hardware/                      # 硬件相关（风扇、传感器）
 │   ├── network/                       # 物理口按 MAC 命名（links.nix）+ 宿主机防火墙端口表
-│   ├── gateway/                       # 网关容器组（main-router / tailscale / cloudflared）
+│   ├── gateway/                       # 网关容器组（main-router / tailscale / cloudflare-mesh / cloudflared）
 │   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea
 │   ├── security/                      # SSH、sops-nix
 │   └── users/                         # 用户配置
@@ -69,6 +69,7 @@
 
 内网 ───── lan ──┬─ br-lan ─┬─ main-router.lan     .1   网关 + DHCP + DNS + YunShu 分流
                  │          ├─ tailscale.lan      .4   双实例子网路由器
+                 │          ├─ cloudflare-mesh.lan .5  Cloudflare Mesh 节点
                  │          ├─ cloudflared.lan    .6   Cloudflare 隧道回源
                  │          └─ 宿主机             .2   br-lan 上的管理地址
                  └─ macvlan ──── tailscale.wan        自己的 WAN 出口（隧道不依赖网关）
@@ -79,6 +80,7 @@
 |---|---|
 | `main-router` | 唯一网关：NAT、DHCP、本机 DNS、YunShu 策略分流（被墙域名走隧道） |
 | `tailscale` | 两个 tailscale 实例（官方控制面 + 自建 headscale），子网路由器 |
+| `cloudflare-mesh` | Cloudflare Mesh 节点（原 WARP Connector）；把 `192.168.10.0/24` 广告给 Mesh，路由在 CF 面板配置 |
 | `cloudflared` | 内网服务的内网穿透隧道（token 模式，ingress 在 CF 面板管理） |
 
 **DNS 链路是这套设计的核心**：客户端 DNS 由 DHCP 下发为网关 `.1`，main-router 内的
@@ -172,9 +174,16 @@ sudo nixos-rebuild switch --flake .#default
 
 ### 5. 配置网关容器的密钥
 
-三个密钥（`tailscale-auth-key` / `headscale-auth-key` / `cloudflared-token`）
-由 sops-nix 加密存放，宿主解密后经 systemd-nspawn 的 `--load-credential` 注入容器，
-容器内不留副本。配置方法与验收步骤见 [INSTALL.md](INSTALL.md)。
+四个密钥（`tailscale-auth-key` / `headscale-auth-key` / `cloudflared-token` /
+`cloudflare-mesh-token`）由 sops-nix 加密存放，宿主解密后经 systemd-nspawn 的
+`--load-credential` 注入容器，容器内不留副本。配置方法与验收步骤见
+[INSTALL.md](INSTALL.md)。
+
+> **Cloudflare Mesh**：token 在 Zero Trust 面板 **Networking → Mesh → Add node** 生成；
+> 节点创建后要在 **Routes** 里加 `192.168.10.0/24`。Mesh 节点的回程走容器内 SNAT
+> （源地址显示为 `.5`），若需要保留 Mesh 源 IP，改成 DHCP option 121 下发路由。
+> 注册身份持久化在 `/srv/state/cloudflare-mesh`；要换成另一个节点时先清空该目录，
+> 否则那个 token 不会再被消费。
 
 > ⚠️ **首次部署前必读**：接口改名由 udev 在设备出现时处理，**必须重启才生效**，
 > 且可能让机器失联。远端部署用 [`scripts/deploy-nas.sh`](scripts/deploy-nas.sh)——

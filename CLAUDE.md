@@ -11,7 +11,7 @@ QNAP TS-564 的 NixOS 一体化网关宿主：**纯二层宿主机 + 一组 syst
 > **⚠️ 2026-09-17/18：收敛为单网关容器。** side-router/VRRP 与 dnsmasq 容器均已删除，
 > main-router 一人做网关 + DHCP + DNS，静态持 `.1`；DNS 是本机 dnsmasq（上游
 > `strict-order`：隧道 DNS → 公网 DNS），不再用跨容器 DNAT（实测不通）。
-> tailscale / cloudflared 保持独立容器。
+> tailscale / cloudflare-mesh / cloudflared 保持独立容器。
 >
 > **`docs/gateway.md` 是双网关/macvlan 时期的设计记录**（开头列了过时章节清单），
 > 只作历史参考，尚未重写。
@@ -89,6 +89,7 @@ DNS，否则 flake update / sops 解密 / NTP 对时全都做不了。默认路�
 | 网关 | `192.168.10.1` | main-router 的 LAN 地址；下游设备的默认网关与 DNS |
 | 宿主机 | `.2` | `br-lan`（与旧系统同址，SSH/脚本不用改） |
 | tailscale | `.4` | 两个 tailscale 实例 |
+| cloudflare-mesh | `.5` | Mesh 节点（原 WARP Connector） |
 | cloudflared | `.6` | 隧道 |
 
 > `.3` 已释放：原 side-router 已删除，网关不再做 VRRP 漂移。
@@ -99,6 +100,7 @@ DNS，否则 flake update / sops 解密 / NTP 对时全都做不了。默认路�
 |---|---|---|---|
 | `main-router.nix` | main-router | `br-lan`(veth `lan`) + `wan`(macvlan `wan`) | 由 **`router-container`** 构建；唯一网关 |
 | `tailscale.nix` | tailscale | `br-lan`(`lan`) + `wan`(macvlan `wan`) | 官方实例走 `services.tailscale`，headscale 实例手写单元（NixOS 不支持多实例） |
+| `cloudflare-mesh.nix` | cloudflare-mesh | `br-lan`(`lan`) | Mesh 节点（L3 双向）；`services.cloudflare-warp` 起 daemon，注册/连接手写 oneshot |
 | `cloudflared.nix` | cloudflared | `br-lan`(`lan`) | token 模式，`services.cloudflared` 不支持所以手写 |
 
 `main-router` 的全部配置就是十几个 `router.*` 选项 + **一行 VPN**：
@@ -125,9 +127,14 @@ VPN 通过契约（`transit.{interface,fakeIpCidrs,dnsUpstream}` + `guestModules
   在网关地址上起 dnsmasq，上游 `strict-order` 排成「隧道 DNS → 公网 DNS」。真机实测过
   跨容器 DNAT 根本不通（指向别的容器或公网地址一律超时），而且目标不可达时客户端 DNS
   会整个断掉而不是降级。本地监听器永远在场，选错上游最多是慢。
-- **tailscale / cloudflared 靠 resolv.conf 保持直连**：它们的默认网关是 `.1`，但
-  `/etc/resolv.conf` 写死公网 DNS，拿不到 fake-IP 就不会被 YunShu 分流。改它们的
-  resolv.conf 等于把它们塞进隧道。
+- **tailscale / cloudflared / cloudflare-mesh 靠 resolv.conf 保持直连**：它们的默认
+  网关是 `.1`，但 `/etc/resolv.conf` 写死公网 DNS，拿不到 fake-IP 就不会被 YunShu
+  分流。改它们的 resolv.conf 等于把它们塞进隧道。
+- **cloudflare-mesh 的回程必须 SNAT**：节点不是网关，LAN 主机把回包发给 `.1`，`.1`
+  没有 `100.96.0.0/12` 路由。容器里用
+  `oifname lan ip saddr 100.96.0.0/12 masquerade`，和 tailscale 那条同源。
+  另外 `warp-cli` 必须和 `warp-svc` 用同一个 `RUNTIME_DIRECTORY`
+  （`/run/cloudflare-warp`），否则找不到 IPC socket。
 
 ### 宿主机服务与密钥
 
@@ -135,7 +142,7 @@ VPN 通过契约（`transit.{interface,fakeIpCidrs,dnsUpstream}` + `guestModules
   OpenList / Gitea / 下载（qBittorrent+aria2）/ 备份。**Cockpit 已删除**（含 9090 放行），Web 管理走 Glance。
 - sops-nix：age 私钥 `/var/lib/sops-nix/key.txt`，`defaultSopsFile` = `secrets/secrets.yaml`。
 - **网关容器的密钥注入**：宿主 sops 解密 → nspawn `--load-credential` → 容器内
-  `/run/credentials/@system/<id>`（内存，不留副本）。三个密钥都带 `restartUnits`——
+  `/run/credentials/@system/<id>`（内存，不留副本）。四个密钥都带 `restartUnits`——
   激活脚本重写 `/run/secrets` 后容器**不重启就还用旧凭据**。
 - QNAP 硬件支持来自 flake input `qnap8528`；风扇配置在求值时读该仓库的
   `examples/fancontrol.conf`（改那个仓库会影响本配置）。
