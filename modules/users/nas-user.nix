@@ -56,7 +56,10 @@
   # 路径约定：性能敏感/可重建的应用状态放 /srv/cache（SSD），
   # 不可再生数据放 /srv/data（Btrfs RAID1），无独立的 /srv/app 目录
   systemd.tmpfiles.rules = [
-    "d /srv/data 0755 nas storage -"
+    # /srv/data 必须归 root：tmpfiles 的安全检查只允许 root→任意属主，
+    # 父目录是 nas 时 application/（root）、gitea/（gitea）等子树会被判
+    # unsafe 并 exit 73，整批规则静默失效。用户数据子目录仍归 nas。
+    "d /srv/data 0755 root storage -"
     "d /srv/backup 0755 nas storage -"
     "d /srv/cache 0755 nas storage -"
 
@@ -71,15 +74,15 @@
     "d /srv/data/models 0755 nas nas -"
   ];
 
-  # tmpfiles 不修改挂载点自身，上面 d /srv/{data,cache,backup} 的 nas:storage
-  # 对挂载后的根无效（实际是 root:root）→ Samba(force user=nas) 在共享根写不了。
-  # 挂载完成后补一次 chown。
+  # 挂载后补一次 chown：tmpfiles 与挂载的时序不保证（实测全量 --create 时
+  # cache/backup 没被处理），共享根不可写会让 Samba(force user=nas) 写不进去。
+  # /srv/data 保持 root，理由见上面的 tmpfiles 规则。
   #
   # partOf：挂载单元被重挂/重启时跟着重跑。只有 after/requires 的话服务一生只跑
   # 一次，挂载后来变了它不会补。脚本里的 mountpoint 断言是配套的兜底——未挂载时
   # chown 会打在**被挂载遮蔽的底层目录**上，看起来成功、挂载一上来就失效。
   systemd.services.srv-mount-owner = {
-    description = "修正 /srv 挂载点属主（tmpfiles 不覆盖挂载点）";
+    description = "修正 /srv 挂载点属主";
     wantedBy = [ "multi-user.target" ];
     after = [ "srv-data.mount" "srv-cache.mount" "srv-backup.mount" ];
     requires = [ "srv-data.mount" "srv-cache.mount" "srv-backup.mount" ];
@@ -95,7 +98,8 @@
           exit 1
         }
       done
-      ${pkgs.coreutils}/bin/chown nas:storage /srv/data /srv/cache /srv/backup
+      ${pkgs.coreutils}/bin/chown root:storage /srv/data
+      ${pkgs.coreutils}/bin/chown nas:storage /srv/cache /srv/backup
       ${pkgs.coreutils}/bin/chmod 0755 /srv/data /srv/cache /srv/backup
     '';
   };
