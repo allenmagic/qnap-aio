@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 let
   # 下载目录分三个子目录：三个工具运行身份不同（qBittorrent 以 nas 跑、
@@ -10,6 +10,14 @@ let
   videoDir = "${downloadRoot}/video";
 
   lanIp = "192.168.10.2";
+
+  # 替代 WebUI：bitsy（上游按 qBittorrent 5.3.0 制作，故 qbittorrent 包取自 unstable）
+  bitsyTheme = pkgs.fetchFromGitHub {
+    owner = "englund";
+    repo = "bitsy-qbittorrent-theme";
+    rev = "b742093ab25e53edfc739c2ac1db61d5bb811ca4";
+    hash = "sha256-S2lLo8aP7PJq66xvjEszDwnJXisusurNfh0+izFMTmU=";
+  };
 
   # qBittorrent 的 serverConfig 会经 nix store 落盘（全员可读），不能放密码。
   # 这里放占位符，启动前由下面的 ExecStartPre 用 sops 里的明文算 PBKDF2 覆盖。
@@ -47,6 +55,7 @@ in
   # PT 站基本都放行它；aria2 常因客户端行为上报不合规被 PT 站封禁，所以两者分工。
   services.qbittorrent = {
     enable = true;
+    package = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.qbittorrent-nox;
     user = "nas";
     group = "nas";
     webuiPort = 8081;
@@ -67,6 +76,9 @@ in
           Address = lanIp; # 只绑内网 shim
           Username = "nas";
           Password_PBKDF2 = qbPasswordPlaceholder;
+          # qBittorrent 的替代 WebUI 必须指向含 public/ 和 private/ 的 www/
+          AlternativeUIEnabled = true;
+          RootFolder = "${bitsyTheme}/www";
         };
         General.Locale = "zh_CN";
       };
