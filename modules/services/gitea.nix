@@ -12,12 +12,34 @@ let
 
   # 第三方主题（Gitea 1.27/1.28 系列）。构建时要下载；GFW 会间歇性拦 GitHub
   # （见 deploy-nas.sh），失败时在工作站构建后 nix copy 过去。
-  themeGithub = pkgs.fetchzip {
+  themeMechiland = pkgs.fetchzip {
     url = "https://github.com/mechiland/gitea-theme-github/releases/download/v0.3.0/gitea-theme-github-0.3.0-gitea1.27-28.tar.gz";
     hash = "sha256-bPq1scpPvVyUvp15S1UJeMLZnd+iHH1rRMlESp0OAQs=";
     # 归档是平铺的（./public、./templates），没有单一顶层目录
     stripRoot = false;
   };
+
+  # 第二个 GitHub 风格主题，版本号 = 对应的 Gitea 系列（1.27.3 适用于 1.27.x）。
+  # 归档只有一个顶层 dist/，fetchzip 默认会剥掉。
+  themeLuting = pkgs.fetchzip {
+    url = "https://github.com/lutinglt/gitea-github-theme/releases/download/v1.27.3/theme-github-base.tar.gz";
+    hash = "sha256-kuxECCkJ2jAexD3uCHdr3UZHRki+TEmR1xQN1AX+zuA=";
+  };
+
+  # 两个主题都用 github-* 文件名，不能直接叠加；合并成一份 assets 再整体链入。
+  # luting 的 auto 主题靠 @import "./theme-github-dark.css" 引同目录文件，
+  # 改名成 luting-* 时必须同步改 CSS 里的引用。
+  themeAssets = pkgs.runCommand "gitea-theme-assets" { } ''
+    mkdir -p $out/public
+    cp -r ${themeMechiland}/public/assets $out/public/assets
+    chmod -R u+w $out/public/assets
+
+    for f in ${themeLuting}/theme-github-*.css; do
+      name=$(basename "$f")
+      newname=$(echo "$name" | sed 's/^theme-github-/theme-luting-/')
+      sed 's#theme-github-#theme-luting-#g' "$f" > "$out/public/assets/css/$newname"
+    done
+  '';
 
   # 管理员初始化：gitea 模块不建用户，而 DISABLE_REGISTRATION=true 后没人能注册。
   # 密码走 LoadCredential：以 gitea 身份直读 /run/secrets 依赖 sops 激活与建用户的先后。
@@ -87,19 +109,18 @@ in
       repository.DEFAULT_BRANCH = "main";
 
       ui = {
-        THEMES = "gitea-auto,gitea-light,gitea-dark,github-auto,github-light,github-dark";
+        THEMES = "gitea-auto,gitea-light,gitea-dark,github-auto,github-light,github-dark,luting-auto,luting-light,luting-dark,luting-soft-dark";
         DEFAULT_THEME = "github-auto";
       };
     };
   };
 
-  # 主题文件从 store 链入 customDir。不用 tmpfiles：/srv/data 归 nas 所有，
-  # root 的 tmpfiles 遇到 nas→root 的属主跳变会以 "unsafe path transition"
-  # 拒绝创建（exit 73），规则静默失效。
+  # 主题文件从 store 链入 customDir。用 preStart（以 gitea 运行）而不是 tmpfiles：
+  # 父目录本来就归 gitea，不依赖激活阶段的规则时序。
   systemd.services.gitea.preStart = lib.mkAfter ''
     mkdir -p ${config.services.gitea.customDir}/public
-    ln -sfn ${themeGithub}/public/assets ${config.services.gitea.customDir}/public/assets
-    ln -sfn ${themeGithub}/templates ${config.services.gitea.customDir}/templates
+    ln -sfn ${themeAssets}/public/assets ${config.services.gitea.customDir}/public/assets
+    ln -sfn ${themeMechiland}/templates ${config.services.gitea.customDir}/templates
   '';
 
   systemd.services.gitea-admin-init = {
