@@ -10,6 +10,15 @@ let
   adminUser = "nas";
   adminEmail = "nas@allenmagic.cn";
 
+  # 第三方主题（Gitea 1.27/1.28 系列）。构建时要下载；GFW 会间歇性拦 GitHub
+  # （见 deploy-nas.sh），失败时在工作站构建后 nix copy 过去。
+  themeGithub = pkgs.fetchzip {
+    url = "https://github.com/mechiland/gitea-theme-github/releases/download/v0.3.0/gitea-theme-github-0.3.0-gitea1.27-28.tar.gz";
+    hash = "sha256-bPq1scpPvVyUvp15S1UJeMLZnd+iHH1rRMlESp0OAQs=";
+    # 归档是平铺的（./public、./templates），没有单一顶层目录
+    stripRoot = false;
+  };
+
   # 管理员初始化：gitea 模块不建用户，而 DISABLE_REGISTRATION=true 后没人能注册。
   # 密码走 LoadCredential：以 gitea 身份直读 /run/secrets 依赖 sops 激活与建用户的先后。
   adminInit = pkgs.writeShellApplication {
@@ -76,8 +85,20 @@ in
       service.DISABLE_REGISTRATION = true;
 
       repository.DEFAULT_BRANCH = "main";
+
+      ui = {
+        THEMES = "gitea-auto,gitea-light,gitea-dark,github-auto,github-light,github-dark";
+        DEFAULT_THEME = "github-auto";
+      };
     };
   };
+
+  # customDir 必须可写（app.ini 与密钥由 preStart 写），主题文件从 store 链入。
+  # Gitea 只在启动时扫描主题，改主题版本后要手动 restart gitea（换 CSS 热生效）。
+  systemd.tmpfiles.rules = [
+    "L+ ${config.services.gitea.customDir}/public/assets - - - - ${themeGithub}/public/assets"
+    "L+ ${config.services.gitea.customDir}/templates - - - - ${themeGithub}/templates"
+  ];
 
   systemd.services.gitea-admin-init = {
     description = "初始化 Gitea 管理员账号";
