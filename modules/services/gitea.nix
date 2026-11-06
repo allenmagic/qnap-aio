@@ -93,12 +93,14 @@ in
     };
   };
 
-  # customDir 必须可写（app.ini 与密钥由 preStart 写），主题文件从 store 链入。
-  # Gitea 只在启动时扫描主题，改主题版本后要手动 restart gitea（换 CSS 热生效）。
-  systemd.tmpfiles.rules = [
-    "L+ ${config.services.gitea.customDir}/public/assets - - - - ${themeGithub}/public/assets"
-    "L+ ${config.services.gitea.customDir}/templates - - - - ${themeGithub}/templates"
-  ];
+  # 主题文件从 store 链入 customDir。不用 tmpfiles：/srv/data 归 nas 所有，
+  # root 的 tmpfiles 遇到 nas→root 的属主跳变会以 "unsafe path transition"
+  # 拒绝创建（exit 73），规则静默失效。
+  systemd.services.gitea.preStart = lib.mkAfter ''
+    mkdir -p ${config.services.gitea.customDir}/public
+    ln -sfn ${themeGithub}/public/assets ${config.services.gitea.customDir}/public/assets
+    ln -sfn ${themeGithub}/templates ${config.services.gitea.customDir}/templates
+  '';
 
   systemd.services.gitea-admin-init = {
     description = "初始化 Gitea 管理员账号";
