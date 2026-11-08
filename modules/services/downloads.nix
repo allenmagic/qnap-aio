@@ -12,12 +12,55 @@ let
   lanIp = "192.168.10.2";
 
   # 替代 WebUI：bitsy（上游按 qBittorrent 5.3.0 制作，故 qbittorrent 包取自 unstable）
-  bitsyTheme = pkgs.fetchFromGitHub {
+  bitsySrc = pkgs.fetchFromGitHub {
     owner = "englund";
     repo = "bitsy-qbittorrent-theme";
     rev = "b742093ab25e53edfc739c2ac1db61d5bb811ca4";
     hash = "sha256-S2lLo8aP7PJq66xvjEszDwnJXisusurNfh0+izFMTmU=";
   };
+
+  # bitsy 的 www/translations 只有 .ts 源文件，而替代 WebUI 要读取编译后的
+  # webui_<locale>.qm；顺手补上主题新增、上游 .ts 缺的几条中文翻译。
+  bitsyTheme = pkgs.runCommand "bitsy-qbittorrent-theme" {
+    nativeBuildInputs = [ pkgs.qt6.qttools pkgs.python3 ];
+  } ''
+    mkdir -p $out
+    cp -r ${bitsySrc}/www $out/www
+    chmod -R u+w $out/www/translations
+
+    python3 - "$out/www/translations/webui_zh_CN.ts" <<'PY'
+import sys, xml.etree.ElementTree as ET
+p = sys.argv[1]
+tree = ET.parse(p)
+root = tree.getroot()
+pairs = {
+    "Accent color:": "强调色：",
+    "OLED black": "OLED 黑",
+    "Blue": "蓝色",
+    "Green": "绿色",
+    "Orange": "橙色",
+    "Pink": "粉色",
+    "Purple": "紫色",
+}
+ctx = next(c for c in root.findall("context") if c.findtext("name") == "OptionsDialog")
+existing = {m.findtext("source"): m for m in ctx.findall("message")}
+for src, dst in pairs.items():
+    m = existing.get(src)
+    if m is None:
+        m = ET.SubElement(ctx, "message")
+        ET.SubElement(m, "source").text = src
+        ET.SubElement(m, "translation").text = dst
+    else:
+        t = m.find("translation")
+        t.text = dst
+        t.attrib.pop("type", None)
+tree.write(p, encoding="utf-8", xml_declaration=True)
+PY
+
+    for ts in $out/www/translations/*.ts; do
+      lrelease -silent "$ts" -qm "''${ts%.ts}.qm"
+    done
+  '';
 
   # qBittorrent 的 serverConfig 会经 nix store 落盘（全员可读），不能放密码。
   # 这里放占位符，启动前由下面的 ExecStartPre 用 sops 里的明文算 PBKDF2 覆盖。
