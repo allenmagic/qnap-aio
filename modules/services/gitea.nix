@@ -10,8 +10,8 @@ let
   adminUser = "nas";
   adminEmail = "nas@allenmagic.cn";
 
-  # 第三方主题（Gitea 1.27/1.28 系列）。构建时要下载；GFW 会间歇性拦 GitHub
-  # （见 deploy-nas.sh），失败时在工作站构建后 nix copy 过去。
+  # 第三方主题（Gitea 1.27/1.28 系列）。构建时需访问 GitHub（NAS 可正常访问）；
+  # 如遇临时网络问题，可在工作站构建后 nix copy 过去。
   themeMechiland = pkgs.fetchzip {
     url = "https://github.com/mechiland/gitea-theme-github/releases/download/v0.3.0/gitea-theme-github-0.3.0-gitea1.27-28.tar.gz";
     hash = "sha256-bPq1scpPvVyUvp15S1UJeMLZnd+iHH1rRMlESp0OAQs=";

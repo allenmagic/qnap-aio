@@ -71,6 +71,7 @@
                  │          ├─ tailscale.lan      .4   双实例子网路由器
                  │          ├─ cloudflare-mesh.lan .5  Cloudflare Mesh 节点
                  │          ├─ cloudflared.lan    .6   Cloudflare 隧道回源
+                 │          ├─ tailscale-ecs.lan  .7   迁移实例：aliyun-ecs 新 headscale
                  │          └─ 宿主机             .2   br-lan 上的管理地址
                  └─ macvlan ──── tailscale.wan        自己的 WAN 出口（隧道不依赖网关）
      内网设备 .100-.200（main-router 内的 dnsmasq 提供 DHCP）
@@ -80,6 +81,7 @@
 |---|---|
 | `main-router` | 唯一网关：NAT、DHCP、本机 DNS、YunShu 策略分流（被墙域名走隧道） |
 | `tailscale` | 两个 tailscale 实例（官方控制面 + 自建 headscale），子网路由器 |
+| `tailscale-ecs` | 迁移实例：连接 aliyun-ecs 新 headscale（`hs.allenmagic.cn:8443`），子网路由器；与 `tailscale` 容器完全隔离 |
 | `cloudflare-mesh` | Cloudflare Mesh 节点（原 WARP Connector）；把 `192.168.10.0/24` 广告给 Mesh，路由在 CF 面板配置 |
 | `cloudflared` | 内网服务的内网穿透隧道（token 模式，ingress 在 CF 面板管理） |
 
