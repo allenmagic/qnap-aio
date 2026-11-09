@@ -4,8 +4,8 @@
 #   br-lan ──> lan  192.168.10.7/24   LAN（单口，默认网关 .1）
 #
 # 迁移期间两个容器并存，旧实例不动，新实例独立注册到
-# https://hs.allenmagic.cn（当前 Cloudflare Tunnel 入口；hp 仅是管理 UI）。
-# 验证完成后，再由人工决定何时下线旧实例。
+# https://hs-direct.allenmagic.cn:8443（客户端直连入口，不走 Cloudflare；
+# hs.allenmagic.cn 仅用于管理 UI/API）。验证完成后，再由人工决定何时下线旧实例。
 #
 # ⚠️ 容器名必须短（这里用 ts-ecs）：nspawn 以 vb-<容器名> 命名宿主 veth，
 #    超过 15 字符会被截断；tailscale-ecs 曾因此与残留 veth 冲突（File exists）。
@@ -19,7 +19,7 @@ let
   stateDir = "/srv/state/ts-ecs"; # data 卷的子卷，不在 NFS/Samba 导出内
   advertiseRoute = "192.168.10.0/24";
   tsHostname = "nixos-router-vm-hs-ecs";
-  hsControlUrl = "https://hs.allenmagic.cn";
+  hsControlUrl = "https://hs-direct.allenmagic.cn:8443";
 
   # 密钥不落盘：sops 在宿主解密 → nspawn --load-credential 注入容器 PID 1 的
   # 凭据目录 → 下面直接从这里读。容器内不写任何持久副本。
@@ -139,10 +139,11 @@ in
         wants = [ "network-online.target" ]; # after 了就要依赖，否则 systemd 告警
         requires = [ "tailscaled-headscale-ecs.service" ];
         serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          # tailscale up 在首次注册时会阻塞；限制等待时间，避免拖住容器启动
-          TimeoutStartSec = "60s";
+          # Type=simple：tailscale up 在首次注册时会阻塞，不能让 oneshot
+          # 拖住 multi-user/nspawn 就绪；失败后由 Restart 自动重试。
+          Type = "simple";
+          Restart = "on-failure";
+          RestartSec = 30;
           ExecStart = pkgs.writeShellScript "headscale-ecs-autoconnect" ''
             set -eu
             ts=${pkgs.tailscale}/bin/tailscale
