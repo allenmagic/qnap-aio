@@ -117,6 +117,18 @@
         mode = "0400";
         restartUnits = [ "container@ts-ecs" ];
       };
+
+      # NAS WireGuard spoke（非 Tailscale 设备访问 LAN）
+      wg-spoke-private-key = {
+        owner = "root";
+        mode = "0400";
+        restartUnits = [ "container@wg-spoke" ];
+      };
+      wg-spoke-preshared-key = {
+        owner = "root";
+        mode = "0400";
+        restartUnits = [ "container@wg-spoke" ];
+      };
       cloudflared-token = {
         owner = "root";
         mode = "0400";

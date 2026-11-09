@@ -57,4 +57,9 @@ in
     iface = "lan";
     mac = "02:00:00:02:00:53";
   };
+
+  containers.wg-spoke.config = mkPrepare {
+    iface = "lan";
+    mac = "02:00:00:02:00:54";
+  };
 }

@@ -8,12 +8,14 @@
   #   cloudflare-mesh .5 br-lan                 Mesh 节点（L3 双向，原 WARP Connector）
   #   cloudflared  .6   br-lan                  内网穿透（token 模式）
   #   ts-ecs        .7  br-lan                  迁移实例：aliyun-ecs 新 headscale
+  #   wg-spoke      .8  br-lan                  WireGuard spoke（非 Tailscale 设备）
   #
   # DHCP/DNS 合进 main-router：客户端拿到的 option 3/6 必须是同一个地址。
   imports = [
     ./main-router.nix
     ./tailscale.nix
     ./tailscale-ecs.nix
+    ./wg-spoke.nix
     ./cloudflared.nix
     ./cloudflare-mesh.nix
     # 桥接容器的接口整备（nspawn 的 veth 改名 + 固定 MAC）
