@@ -53,7 +53,7 @@ in
     mac = "02:00:00:02:00:52";
   };
 
-  containers.tailscale-ecs.config = mkPrepare {
+  containers.ts-ecs.config = mkPrepare {
     iface = "lan";
     mac = "02:00:00:02:00:53";
   };

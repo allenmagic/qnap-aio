@@ -1,20 +1,21 @@
-# tailscale-ecs —— 连接 aliyun-ecs 新 headscale 的迁移实例
+# ts-ecs —— 连接 aliyun-ecs 新 headscale 的迁移实例
 #
 # 与现有 tailscale 容器（官方 + 旧 headscale hs.zyx1986.icu）完全隔离：
-#   br-lan ──> lan     192.168.10.7/24   LAN（单口，出站直连）
-#   wan(macvlan)       DHCP              默认路由，不依赖网关 .1
+#   br-lan ──> lan  192.168.10.7/24   LAN（单口，默认网关 .1）
 #
 # 迁移期间两个容器并存，旧实例不动，新实例独立注册到
 # https://hs.allenmagic.cn:8443。验证完成后，再由人工决定何时下线旧实例。
+#
+# ⚠️ 容器名必须短（这里用 ts-ecs）：nspawn 以 vb-<容器名> 命名宿主 veth，
+#    超过 15 字符会被截断；tailscale-ecs 曾因此与残留 veth 冲突（File exists）。
+# ⚠️ 网络走 LAN 网关 .1，而不是像旧实例那样用 WAN macvlan 直连上游：
+#    迁移实例不需要网关故障时的独立性，走宿主机已验证可用的链路更稳。
 
 { config, lib, pkgs, ... }:
 
 let
   lanIp = "192.168.10.7";
-  # WAN 侧 macvlan 的 MAC：上游按 MAC 认租约，nspawn 每次重建都随机生成，必须固定
-  wanMac = "02:00:00:02:00:43";
-
-  stateDir = "/srv/state/tailscale-ecs"; # data 卷的子卷，不在 NFS/Samba 导出内
+  stateDir = "/srv/state/ts-ecs"; # data 卷的子卷，不在 NFS/Samba 导出内
   advertiseRoute = "192.168.10.0/24";
   tsHostname = "nixos-router-vm-hs-ecs";
   hsControlUrl = "https://hs.allenmagic.cn:8443";
@@ -25,11 +26,11 @@ let
 in
 {
   # 不用 tmpfiles：它在 sysinit 跑，与 /srv/data 挂载竞态，目录会被挂载点遮住
-  systemd.services.tailscale-ecs-state-dirs = {
-    description = "创建 tailscale-ecs 容器的状态目录（须晚于 /srv/data 挂载）";
+  systemd.services.ts-ecs-state-dirs = {
+    description = "创建 ts-ecs 容器的状态目录（须晚于 /srv/data 挂载）";
     wantedBy = [ "multi-user.target" ];
-    before = [ "container@tailscale-ecs.service" ];
-    requiredBy = [ "container@tailscale-ecs.service" ];
+    before = [ "container@ts-ecs.service" ];
+    requiredBy = [ "container@ts-ecs.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -40,13 +41,11 @@ in
     '';
   };
 
-  containers.tailscale-ecs = {
+  containers.ts-ecs = {
     autoStart = true;
     privateNetwork = true;
     enableTun = true;
     hostBridge = "br-lan";
-    # 自己在 WAN 上也要一个地址：隧道**不依赖网关出网**，网关故障时仍可维护
-    macvlans = [ "wan:wan" ];
 
     extraFlags = [
       "--load-credential=hs-authkey:${config.sops.secrets.headscale-ecs-auth-key.path}"
@@ -62,18 +61,8 @@ in
 
     config = { config, lib, pkgs, ... }: {
       system.stateVersion = "26.05";
+      # 容器内主机名（DHCP/日志用）；与容器名 ts-ecs 区分，tailnet 主机名见 tsHostname
       networking.hostName = "tailscale-ecs";
-
-      systemd.services.fix-wan-mac = {
-        description = "固定 WAN 口 MAC（nspawn 每次重建都随机生成）";
-        before = [ "network-pre.target" ];
-        wantedBy = [ "network-pre.target" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-        };
-        script = "${pkgs.iproute2}/bin/ip link set wan address ${wanMac}";
-      };
 
       networking = {
         interfaces.lan.ipv4.addresses = [
@@ -83,13 +72,10 @@ in
           }
         ];
 
-        # 默认路由走自己的 WAN 口（DHCP 提供），不指向网关 .1
-        interfaces.wan.useDHCP = true;
-        # nohook：resolv.conf 下面写死了，dhcpcd 写它会报错。
-        dhcpcd.extraConfig = ''
-          nohook resolv.conf
-          hostname tailscale-ecs
-        '';
+        defaultGateway = {
+          address = "192.168.10.1";
+          interface = "lan";
+        };
         resolvconf.enable = false;
 
         firewall = {
@@ -154,6 +140,8 @@ in
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
+          # tailscale up 在首次注册时会阻塞；限制等待时间，避免拖住容器启动
+          TimeoutStartSec = "60s";
           ExecStart = pkgs.writeShellScript "headscale-ecs-autoconnect" ''
             set -eu
             ts=${pkgs.tailscale}/bin/tailscale

@@ -115,7 +115,7 @@
       headscale-ecs-auth-key = {
         owner = "root";
         mode = "0400";
-        restartUnits = [ "container@tailscale-ecs" ];
+        restartUnits = [ "container@ts-ecs" ];
       };
       cloudflared-token = {
         owner = "root";
