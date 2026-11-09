@@ -4,7 +4,8 @@
 #   br-lan ──> lan  192.168.10.7/24   LAN（单口，默认网关 .1）
 #
 # 迁移期间两个容器并存，旧实例不动，新实例独立注册到
-# https://hs.allenmagic.cn:8443。验证完成后，再由人工决定何时下线旧实例。
+# https://hs.allenmagic.cn（当前 Cloudflare Tunnel 入口；hp 仅是管理 UI）。
+# 验证完成后，再由人工决定何时下线旧实例。
 #
 # ⚠️ 容器名必须短（这里用 ts-ecs）：nspawn 以 vb-<容器名> 命名宿主 veth，
 #    超过 15 字符会被截断；tailscale-ecs 曾因此与残留 veth 冲突（File exists）。
@@ -18,7 +19,7 @@ let
   stateDir = "/srv/state/ts-ecs"; # data 卷的子卷，不在 NFS/Samba 导出内
   advertiseRoute = "192.168.10.0/24";
   tsHostname = "nixos-router-vm-hs-ecs";
-  hsControlUrl = "https://hs.allenmagic.cn:8443";
+  hsControlUrl = "https://hs.allenmagic.cn";
 
   # 密钥不落盘：sops 在宿主解密 → nspawn --load-credential 注入容器 PID 1 的
   # 凭据目录 → 下面直接从这里读。容器内不写任何持久副本。
@@ -146,6 +147,14 @@ in
             set -eu
             ts=${pkgs.tailscale}/bin/tailscale
             sock=/run/headscale/tailscaled.sock
+
+            # tailscale 不允许在已登录状态下直接切换控制面；地址变化时先 logout。
+            # 当前地址从 tailscaled prefs 读取（未登录时为空，跳过）。
+            cur=$("$ts" --socket="$sock" debug prefs 2>/dev/null \
+              | sed -n 's/.*"ControlURL": "\([^"]*\)".*/\1/p' | head -1)
+            if [ -n "$cur" ] && [ "$cur" != "${hsControlUrl}" ]; then
+              "$ts" --socket="$sock" logout || true
+            fi
 
             # --auth-key 只用于首次注册；节点身份在 /var/lib/headscale 里持久，
             # 之后重启不再需要它（但留着无害，重新注册时才用得上）。
