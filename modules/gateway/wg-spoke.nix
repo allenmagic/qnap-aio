@@ -14,7 +14,7 @@
 let
   lanIp = "192.168.10.8";
   hubPub = "xp7Ix5+/FrDr25Yk/K6+L+cYXrpZKwlvWoTA8Va+fRg=";
-  hubEndpoint = "47.117.59.163:51820";
+  hubEndpoint = "47.117.59.163:51888";
 in
 {
   containers.wg-spoke = {
