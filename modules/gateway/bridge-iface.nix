@@ -48,10 +48,12 @@ in
     mac = "02:00:00:02:00:51";
   };
 
-  containers.cloudflare-mesh.config = mkPrepare {
-    iface = "lan";
-    mac = "02:00:00:02:00:52";
-  };
+  # 2026-11-11 临时禁用 Cloudflare Mesh（模块引用也已在 gateway/default.nix 注释）。
+  # 恢复时两处一起取消注释。
+  # containers.cloudflare-mesh.config = mkPrepare {
+  #   iface = "lan";
+  #   mac = "02:00:00:02:00:52";
+  # };
 
   containers.ts-ecs.config = mkPrepare {
     iface = "lan";
