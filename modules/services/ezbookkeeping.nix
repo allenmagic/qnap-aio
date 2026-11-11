@@ -7,9 +7,6 @@ let
   version = "2.1.1";
   stateDir = "/srv/data/application/ezbookkeeping";
 
-  adminUser = "nas";
-  adminEmail = "nas@allenmagic.cn";
-
   # 官方发布版是静态链接的单个 ELF，不依赖 glibc；直接解包运行，
   # 不需要引入 Docker/Podman。升级只改 version/hash。
   src = pkgs.fetchurl {
@@ -63,32 +60,6 @@ let
     '';
   };
 
-  # 首次启动创建管理员；已存在则跳过。密码来自 sops。
-  adminInit = pkgs.writeShellApplication {
-    name = "ezbookkeeping-admin-init";
-    runtimeInputs = [ pkgs.coreutils pkgs.curl ];
-    text = ''
-      secret_key=$(cat "$CREDENTIALS_DIRECTORY/secret-key")
-      export EBK_SECURITY_SECRET_KEY="$secret_key"
-
-      # 等 Web 服务就绪（SQLite 表初始化完成）再操作。
-      curl -fsS -o /dev/null --retry 30 --retry-connrefused --retry-delay 1 \
-        http://${lanIp}:${toString port}/ || true
-
-      if ${package}/bin/ezbookkeeping \
-           --conf-path ${package}/share/ezbookkeeping/conf/ezbookkeeping.ini \
-           --no-boot-log userdata user-get --username ${adminUser} >/dev/null 2>&1; then
-        exit 0
-      fi
-
-      admin_pw=$(cat "$CREDENTIALS_DIRECTORY/admin-pw")
-      ${package}/bin/ezbookkeeping \
-        --conf-path ${package}/share/ezbookkeeping/conf/ezbookkeeping.ini \
-        --no-boot-log userdata user-add \
-        --username ${adminUser} --email ${adminEmail} --nickname ${adminUser} \
-        --password "$admin_pw" --default-currency CNY
-    '';
-  };
 in
 {
   # ===== ezBookkeeping：个人记账 =====
@@ -96,7 +67,7 @@ in
   # 每晚 02:50 生成一致性快照，03:00 的 nas 备份任务会把它一起带走。
   #
   # 公网访问：cloudflared 隧道 → account.allenmagic.cn → 192.168.10.2:8082。
-  # 管理员 nas 由 admin-init 用 sops 里的密码创建，注册保持关闭。
+  # 账号由用户自行注册；注册已关闭，已有用户（allenmagic）不受影响。
   users.users.ezbookkeeping = {
     isSystemUser = true;
     group = "ezbookkeeping";
@@ -153,32 +124,6 @@ in
       AmbientCapabilities = [ ];
       MemoryMax = "256M";
       TasksMax = 64;
-    };
-  };
-
-  systemd.services.ezbookkeeping-admin-init = {
-    description = "创建 ezBookkeeping 管理员账号";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "ezbookkeeping.service" ];
-    requires = [ "ezbookkeeping.service" ];
-    environment = commonEnv;
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "ezbookkeeping";
-      Group = "ezbookkeeping";
-      WorkingDirectory = stateDir;
-      LoadCredential = [
-        "admin-pw:${config.sops.secrets.ezbookkeeping-admin-password.path}"
-        "secret-key:${config.sops.secrets.ezbookkeeping-secret-key.path}"
-      ];
-      ExecStart = lib.getExe adminInit;
-      UMask = "0077";
-      NoNewPrivileges = true;
-      PrivateTmp = true;
-      ProtectSystem = "strict";
-      ReadWritePaths = [ stateDir ];
-      CapabilityBoundingSet = "";
     };
   };
 

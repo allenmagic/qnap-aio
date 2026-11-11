@@ -416,10 +416,8 @@ systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`�
 `https://account.allenmagic.cn`；数据（SQLite + 附件）在
 `/srv/data/application/ezbookkeeping`，不在 Samba/NFS 导出里，已加入 `nas` 备份任务。
 
-- 管理员 `nas` 由 `ezbookkeeping-admin-init` 首次启动时自动创建，密码在 sops 的
-  `ezbookkeeping-admin-password`（`sops -d secrets/secrets.yaml` 查看）。注册
-  `EBK_USER_ENABLE_REGISTER=false`，公网不能自助注册；改密码请在 Web UI 操作
-  （不会回写 sops）。
+- 账号由用户自行注册；目前已有 `allenmagic`。`EBK_USER_ENABLE_REGISTER=false`，
+  公网不能自助注册，已有账号登录不受影响；改密码在 Web UI 操作。
 - 每晚 02:50 用 `sqlite3 .backup` 生成一致性快照到 `snapshots/`，03:00 的备份会把它
   带走。恢复时优先用快照，不要直接用可能正在写入的 `ezbookkeeping.db`。
 - 内置 MCP server 已开启：端点 `https://account.allenmagic.cn/mcp`（streamable-http）。
