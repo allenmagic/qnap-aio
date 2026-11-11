@@ -438,7 +438,10 @@ systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`�
   }
   ```
 
-  MCP token 与 API token 是两套令牌。工具包括 `add_transaction`（支持 `dry_run`）、
+  MCP token 与 API token 是两套令牌。**当前已生成一个 90 天有效的 token**，存于 sops 的
+  `ezbookkeeping-mcp-token`（`sops -d secrets/secrets.yaml` 查看）；过期后在 Web UI 重新
+  生成，或用上面的 CLI 命令（`--expiresInSeconds` 必填）。工具包括 `add_transaction`
+  （支持 `dry_run`）、
   `query_transactions`、`query_all_accounts`、`query_all_accounts_balance`、
   `query_all_transaction_categories`、`query_all_transaction_tags`、
   `query_latest_exchange_rates`。
