@@ -44,6 +44,10 @@ let
     # 公网访问必须放行；鉴权靠 MCP token（必要时再加 Cloudflare Access）。
     EBK_MCP_ENABLE_MCP = "true";
 
+    # 临时开启 API token，仅用于本次历史数据导入的账户/分类批量创建；
+    # 导入完成后会改回 "false" 并 switch。
+    EBK_SECURITY_ENABLE_API_TOKEN = "true";
+
     # 管理员由 admin-init 创建，禁止公网注册。
     EBK_USER_ENABLE_REGISTER = "false";
   };
