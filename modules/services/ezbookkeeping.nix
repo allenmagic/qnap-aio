@@ -27,7 +27,8 @@ let
     name = "ezbookkeeping-start";
     runtimeInputs = [ pkgs.coreutils ];
     text = ''
-      export EBK_SECURITY_SECRET_KEY="$(cat "$CREDENTIALS_DIRECTORY/secret-key")"
+      secret_key=$(cat "$CREDENTIALS_DIRECTORY/secret-key")
+      export EBK_SECURITY_SECRET_KEY="$secret_key"
       exec ${package}/bin/ezbookkeeping server run \
         --conf-path ${package}/share/ezbookkeeping/conf/ezbookkeeping.ini
     '';
