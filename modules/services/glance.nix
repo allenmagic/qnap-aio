@@ -66,6 +66,7 @@
                     { title = "WebDAV"; url = "http://192.168.10.2:4918"; icon = "mdi:folder-network"; alt-status-codes = [ 401 ]; }
                     { title = "Gitea"; url = "http://192.168.10.2:3000"; icon = "si:gitea"; }
                     { title = "Immich"; url = "http://192.168.10.2:2283"; icon = "si:immich"; }
+                    { title = "ezBookkeeping"; url = "http://192.168.10.2:8082"; icon = "mdi:book-open-variant"; }
                   ];
                 }
               ];

@@ -14,6 +14,7 @@
 - **下载与网盘**: qBittorrent、aria2、OpenList
 - **自建 Git**: Gitea（内网 HTTP/SSH + 公网经 Cloudflare 隧道）
 - **照片管理**: Immich（托管库 `/srv/data/photos/immich`，关闭机器学习以省内存）
+- **个人记账**: ezBookkeeping（SQLite + 内置 MCP server，供 AI 客户端读写账目）
 - **仪表盘**: Glance 起始页，汇总各服务入口，自带登录认证
 - **安全管理**: sops-nix 加密密钥管理、SSH 密钥认证
 - **自动化维护**: 定期垃圾回收、SMART 监控、SSD Trim
@@ -48,7 +49,7 @@
 │   ├── hardware/                      # 硬件相关（风扇、传感器）
 │   ├── network/                       # 物理口按 MAC 命名（links.nix）+ 宿主机防火墙端口表
 │   ├── gateway/                       # 网关容器组（main-router / tailscale / cloudflare-mesh / cloudflared）
-│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea、Immich
+│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea、Immich、ezBookkeeping
 │   ├── security/                      # SSH、sops-nix
 │   └── users/                         # 用户配置
 ├── scripts/
@@ -290,7 +291,8 @@ btrfs device stats /srv/data
 - `modules/network/links.nix`：物理口按 MAC 锚定命名（`wan` / `lan`）
 - `modules/network/default.nix`：防火墙端口表（**按接口名匹配**，接口名改了这张表也要改）
 - 各服务的绑定地址：`samba.nix` / `nfs.nix` / `syncthing.nix` / `webdav.nix` /
-  `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix` / `immich.nix`
+  `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix` / `immich.nix` /
+  `ezbookkeeping.nix`
 - `modules/gateway/tailscale.nix`：容器地址、广告的网段
 - `modules/security/ssh.nix` 的 `Match Address`
 
@@ -407,11 +409,30 @@ sudo systemctl restart gitea-admin-init
 ⚠️ 首次启动后到后台确认「机器学习」开关是关闭状态；Immich 自带的数据库备份默认
 每天 02:00 写进 `<mediaLocation>/backups`，会被上面的 rsync 一起带走。
 
+### ezBookkeeping（个人记账 + MCP）
+
+`modules/services/ezbookkeeping.nix`。官方发布版是静态链接的单个 ELF，所以用原生
+systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`；数据（SQLite +
+附件）在 `/srv/data/application/ezbookkeeping`，不在 Samba/NFS 导出里，已加入 `nas`
+备份任务。
+
+- 首次访问先注册管理员；注册默认开启，注册完到后台关闭注册（或把模块里的
+  `EBK_USER_ENABLE_REGISTER` 改成 `"false"` 再 rebuild）。
+- 每晚 02:50 用 `sqlite3 .backup` 生成一致性快照到 `snapshots/`，03:00 的备份会把它
+  带走。恢复时优先用快照，不要直接用可能正在写入的 `ezbookkeeping.db`。
+- 内置 MCP server 已开启：端点 `http://192.168.10.2:8082/mcp`（streamable-http）。
+  到「用户设置 → 安全 → 生成令牌」生成 MCP token，客户端加
+  `Authorization: Bearer <token>`。MCP token 与 API token 是两套令牌。
+- ⚠️ 财务数据敏感：默认只绑 `.2`（内网/Tailscale）。公网暴露时要加 Cloudflare
+  Access，并考虑用 `EBK_MCP_MCP_ALLOWED_REMOTE_IPS` 限制 MCP 来源；接入第三方 LLM
+  意味着账目数据会发给该服务商。
+
 ### Glance 仪表盘
 
 `modules/services/glance.nix`（glanceapp/glance）是内网起始页：`monitor` widget
 汇总本机各 Web 服务入口（Glance / qBittorrent / AriaNg / OpenList / Feishin /
-Navidrome / Syncthing / Beszel / WebDAV / Gitea / Immich），可点击跳转并显示在线状态，
+Navidrome / Syncthing / Beszel / WebDAV / Gitea / Immich / ezBookkeeping），
+可点击跳转并显示在线状态，
 另有时钟、天气（Beijing）、服务器状态。
 
 内网访问：`http://192.168.10.2:8080`，登录用户 `nas`。

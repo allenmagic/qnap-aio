@@ -9,6 +9,7 @@ let
   # 大概率不再触发，但保留排序没有代价。
   bindToShim = [
     "aria2"
+    "ezbookkeeping"
     "gitea"
     "glance"
     "immich-server"
@@ -43,6 +44,8 @@ in
     ./gitea.nix
     # 照片/视频备份：托管库 /srv/data/photos/immich，机器学习关闭
     ./immich.nix
+    # 个人记账：SQLite + 内置 MCP server
+    ./ezbookkeeping.nix
     # cockpit 已删除（含其 9090 端口放行）：系统 Web 管理改用 SSH +
     # services/glance.nix 的仪表盘
     # YunShu 透明网关已移出 services/：容器化后归到

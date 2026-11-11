@@ -19,6 +19,9 @@ let
         # sqlite 库有小概率读到不一致状态；要严格一致就用
         # services.gitea.dump 另行出归档。
         { src = "/srv/data/application/gitea"; dst = "gitea"; }
+        # 财务数据：SQLite 库 + 附件。02:50 生成的一致性快照也在 snapshots/ 下，
+        # 恢复时优先用快照，而不是可能正在写入的 ezbookkeeping.db。
+        { src = "/srv/data/application/ezbookkeeping"; dst = "ezbookkeeping"; }
       ];
     }
     {
