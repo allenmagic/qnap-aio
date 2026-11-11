@@ -17,7 +17,10 @@
     ./tailscale-ecs.nix
     ./wg-spoke.nix
     ./cloudflared.nix
-    ./cloudflare-mesh.nix
+    # 2026-11-11 临时禁用 Cloudflare Mesh；恢复时取消注释。
+    # 容器配置由 bridge-iface.nix 的 containers.cloudflare-mesh 补齐，
+    # 不引用本模块时 autoStart 为 false，不会启动。
+    # ./cloudflare-mesh.nix
     # 桥接容器的接口整备（nspawn 的 veth 改名 + 固定 MAC）
     ./bridge-iface.nix
   ];
