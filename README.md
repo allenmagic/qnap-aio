@@ -412,25 +412,28 @@ sudo systemctl restart gitea-admin-init
 ### ezBookkeeping（个人记账 + MCP）
 
 `modules/services/ezbookkeeping.nix`。官方发布版是静态链接的单个 ELF，所以用原生
-systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`；数据（SQLite +
-附件）在 `/srv/data/application/ezbookkeeping`，不在 Samba/NFS 导出里，已加入 `nas`
-备份任务。
+systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`，公网
+`https://account.allenmagic.cn`；数据（SQLite + 附件）在
+`/srv/data/application/ezbookkeeping`，不在 Samba/NFS 导出里，已加入 `nas` 备份任务。
 
-- 首次访问先注册管理员；注册默认开启，注册完到后台关闭注册（或把模块里的
-  `EBK_USER_ENABLE_REGISTER` 改成 `"false"` 再 rebuild）。
+- 管理员 `nas` 由 `ezbookkeeping-admin-init` 首次启动时自动创建，密码在 sops 的
+  `ezbookkeeping-admin-password`（`sops -d secrets/secrets.yaml` 查看）。注册
+  `EBK_USER_ENABLE_REGISTER=false`，公网不能自助注册；改密码请在 Web UI 操作
+  （不会回写 sops）。
 - 每晚 02:50 用 `sqlite3 .backup` 生成一致性快照到 `snapshots/`，03:00 的备份会把它
   带走。恢复时优先用快照，不要直接用可能正在写入的 `ezbookkeeping.db`。
-- 内置 MCP server 已开启：端点 `http://192.168.10.2:8082/mcp`（streamable-http）。
-  来源限制为 `192.168.10.*`、`100.*.*.*`（Tailscale / Cloudflare Mesh）、`127.0.0.1`。
-  到「用户设置 → 安全 → 生成令牌」生成 MCP token（CLI 等价命令：
-  `userdata user-session-new --type mcp`），客户端配置：
+- 内置 MCP server 已开启：端点 `https://account.allenmagic.cn/mcp`（streamable-http）。
+  未限制来源 IP（cloudflared 会转发真实客户端 IP），鉴权靠 MCP token。到「用户设置 →
+  安全 → 生成令牌」生成（CLI 等价命令：
+  `userdata user-session-new --username nas --type mcp --expiresInSeconds <秒>`）。
+  客户端配置：
 
   ```json
   {
     "mcpServers": {
       "ezbookkeeping": {
         "type": "streamable-http",
-        "url": "http://192.168.10.2:8082/mcp",
+        "url": "https://account.allenmagic.cn/mcp",
         "headers": { "Authorization": "Bearer <token>" }
       }
     }
@@ -441,8 +444,24 @@ systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`�
   `query_transactions`、`query_all_accounts`、`query_all_accounts_balance`、
   `query_all_transaction_categories`、`query_all_transaction_tags`、
   `query_latest_exchange_rates`。
-- ⚠️ 财务数据敏感：默认只绑 `.2`（内网/Tailscale）。公网暴露时要加 Cloudflare
-  Access；接入第三方 LLM 意味着账目数据会发给该服务商。
+
+**Cloudflare Tunnel 接入**（cloudflared 是 token 模式，ingress 在 CF 面板配置）：
+
+> Zero Trust → Networks → Tunnels → 对应隧道 → Public Hostnames → Add
+> - Subdomain/Domain：`account.allenmagic.cn`
+> - Service：`HTTP` → `192.168.10.2:8082`
+
+⚠️ **Cloudflare Access 对 MCP 的影响**：Access 会先于源站拦截请求，MCP 客户端不是
+浏览器，无法走邮箱 OTP。两种做法：
+
+1. 给 MCP 客户端用 **Access Service Token**：在 Access → Service Auth 创建 token，
+   客户端除 `Authorization: Bearer <mcp-token>` 外再加
+   `CF-Access-Client-Id` / `CF-Access-Client-Secret` 两个请求头。
+2. 给 `account.allenmagic.cn/mcp` 单独建一个 Access 应用并设为 Bypass，只靠 MCP
+   token 鉴权；这样公网只泄露 MCP token 就能访问，风险更高。
+
+Web UI 建议仍加 Access（邮箱 OTP 等）。Cloudflare 免费版请求体上限 100 MB；
+ezBookkeeping 的单文件导入上限是 10 MB，不受影响。财务数据敏感，不建议省掉 Access。
 
 ### Glance 仪表盘
 

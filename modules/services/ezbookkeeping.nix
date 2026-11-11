@@ -3,8 +3,12 @@
 let
   lanIp = "192.168.10.2";
   port = 8082;
+  publicHost = "account.allenmagic.cn";
   version = "2.1.1";
   stateDir = "/srv/data/application/ezbookkeeping";
+
+  adminUser = "nas";
+  adminEmail = "nas@allenmagic.cn";
 
   # 官方发布版是静态链接的单个 ELF，不依赖 glibc；直接解包运行，
   # 不需要引入 Docker/Podman。升级只改 version/hash。
@@ -22,6 +26,31 @@ let
     ln -s $out/share/ezbookkeeping/ezbookkeeping $out/bin/ezbookkeeping
   '';
 
+  # 服务端和 CLI 共用同一套配置，避免 admin-init 连错数据库。
+  commonEnv = {
+    TZ = "Asia/Shanghai";
+    EBK_SERVER_PROTOCOL = "http"; # 对外由 cloudflared 终止 TLS
+    EBK_SERVER_HTTP_ADDR = lanIp;
+    EBK_SERVER_HTTP_PORT = toString port;
+    EBK_SERVER_DOMAIN = publicHost;
+    EBK_SERVER_ROOT_URL = "https://${publicHost}/";
+    EBK_SERVER_ENABLE_GZIP = "true";
+    EBK_DATABASE_TYPE = "sqlite3";
+    EBK_DATABASE_DB_PATH = "${stateDir}/data/ezbookkeeping.db";
+    EBK_STORAGE_TYPE = "local_filesystem";
+    EBK_STORAGE_LOCAL_FILESYSTEM_PATH = "${stateDir}/storage/";
+    EBK_LOG_LOG_PATH = "${stateDir}/log/ezbookkeeping.log";
+    EBK_LOG_LOG_FILE_ROTATE = "true";
+
+    # 内置 MCP server：公网端点 https://account.allenmagic.cn/mcp。
+    # 不设 MCP_ALLOWED_REMOTE_IPS：cloudflared 会转发真实客户端 IP，
+    # 公网访问必须放行；鉴权靠 MCP token（必要时再加 Cloudflare Access）。
+    EBK_MCP_ENABLE_MCP = "true";
+
+    # 管理员由 admin-init 创建，禁止公网注册。
+    EBK_USER_ENABLE_REGISTER = "false";
+  };
+
   # secret_key 只在运行时从 LoadCredential 读，不进 nix store / 环境文件。
   startScript = pkgs.writeShellApplication {
     name = "ezbookkeeping-start";
@@ -33,14 +62,41 @@ let
         --conf-path ${package}/share/ezbookkeeping/conf/ezbookkeeping.ini
     '';
   };
+
+  # 首次启动创建管理员；已存在则跳过。密码来自 sops。
+  adminInit = pkgs.writeShellApplication {
+    name = "ezbookkeeping-admin-init";
+    runtimeInputs = [ pkgs.coreutils pkgs.curl ];
+    text = ''
+      secret_key=$(cat "$CREDENTIALS_DIRECTORY/secret-key")
+      export EBK_SECURITY_SECRET_KEY="$secret_key"
+
+      # 等 Web 服务就绪（SQLite 表初始化完成）再操作。
+      curl -fsS -o /dev/null --retry 30 --retry-connrefused --retry-delay 1 \
+        http://${lanIp}:${toString port}/ || true
+
+      if ${package}/bin/ezbookkeeping \
+           --conf-path ${package}/share/ezbookkeeping/conf/ezbookkeeping.ini \
+           --no-boot-log userdata user-get --username ${adminUser} >/dev/null 2>&1; then
+        exit 0
+      fi
+
+      admin_pw=$(cat "$CREDENTIALS_DIRECTORY/admin-pw")
+      ${package}/bin/ezbookkeeping \
+        --conf-path ${package}/share/ezbookkeeping/conf/ezbookkeeping.ini \
+        --no-boot-log userdata user-add \
+        --username ${adminUser} --email ${adminEmail} --nickname ${adminUser} \
+        --password "$admin_pw" --default-currency CNY
+    '';
+  };
 in
 {
   # ===== ezBookkeeping：个人记账 =====
   # 数据（SQLite + 附件）放 /srv/data/application 下，不进 NFS/Samba 导出；
   # 每晚 02:50 生成一致性快照，03:00 的 nas 备份任务会把它一起带走。
   #
-  # 首次访问先注册管理员。注册默认开启；注册完到后台关闭注册，
-  # 或把下面 EBK_USER_ENABLE_REGISTER 改成 "false" 后重建。
+  # 公网访问：cloudflared 隧道 → account.allenmagic.cn → 192.168.10.2:8082。
+  # 管理员 nas 由 admin-init 用 sops 里的密码创建，注册保持关闭。
   users.users.ezbookkeeping = {
     isSystemUser = true;
     group = "ezbookkeeping";
@@ -63,29 +119,7 @@ in
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
 
-    environment = {
-      TZ = "Asia/Shanghai";
-      EBK_SERVER_PROTOCOL = "http";
-      EBK_SERVER_HTTP_ADDR = lanIp;
-      EBK_SERVER_HTTP_PORT = toString port;
-      EBK_SERVER_DOMAIN = lanIp;
-      EBK_SERVER_ROOT_URL = "http://${lanIp}:${toString port}/";
-      EBK_SERVER_ENABLE_GZIP = "true";
-      EBK_DATABASE_TYPE = "sqlite3";
-      EBK_DATABASE_DB_PATH = "${stateDir}/data/ezbookkeeping.db";
-      EBK_STORAGE_TYPE = "local_filesystem";
-      EBK_STORAGE_LOCAL_FILESYSTEM_PATH = "${stateDir}/storage/";
-      EBK_LOG_LOG_PATH = "${stateDir}/log/ezbookkeeping.log";
-      EBK_LOG_LOG_FILE_ROTATE = "true";
-      # 内置 MCP server：端点 http://192.168.10.2:8082/mcp，streamable-http，
-      # 需要用户设置里生成的 MCP token（Authorization: Bearer ...）。
-      # 来源限制：内网 + Tailscale/Cloudflare Mesh 的 CGNAT 段 + 本机。
-      # 其他来源（例如从公网直连）一律拒绝；要增加时改这里。
-      EBK_MCP_ENABLE_MCP = "true";
-      EBK_MCP_MCP_ALLOWED_REMOTE_IPS = "192.168.10.*,100.*.*.*,127.0.0.1";
-      # 首次注册管理员后改成 "false"（或直接在后台关闭注册）。
-      EBK_USER_ENABLE_REGISTER = "true";
-    };
+    environment = commonEnv;
 
     serviceConfig = {
       Type = "simple";
@@ -119,6 +153,32 @@ in
       AmbientCapabilities = [ ];
       MemoryMax = "256M";
       TasksMax = 64;
+    };
+  };
+
+  systemd.services.ezbookkeeping-admin-init = {
+    description = "创建 ezBookkeeping 管理员账号";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "ezbookkeeping.service" ];
+    requires = [ "ezbookkeeping.service" ];
+    environment = commonEnv;
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "ezbookkeeping";
+      Group = "ezbookkeeping";
+      WorkingDirectory = stateDir;
+      LoadCredential = [
+        "admin-pw:${config.sops.secrets.ezbookkeeping-admin-password.path}"
+        "secret-key:${config.sops.secrets.ezbookkeeping-secret-key.path}"
+      ];
+      ExecStart = lib.getExe adminInit;
+      UMask = "0077";
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ReadWritePaths = [ stateDir ];
+      CapabilityBoundingSet = "";
     };
   };
 

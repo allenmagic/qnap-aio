@@ -149,6 +149,13 @@
         restartUnits = [ "ezbookkeeping.service" ];
       };
 
+      # ezBookkeeping 初始管理员 nas 的密码，只在首次创建用户时使用。
+      # 之后在 Web UI 改密码不会回写到 sops。
+      ezbookkeeping-admin-password = {
+        owner = "root";
+        mode = "0400";
+      };
+
       # Beszel agent 认证。内容来自 hub UI「Add System」给出的 SSH 公钥，
       # 为 EnvironmentFile 格式（`KEY=ssh-ed25519 AAAA...`）。
       # 由 services/beszel.nix 的 agent.environmentFile 引用（经 systemd
