@@ -13,6 +13,7 @@
 - **存储服务**: Samba、NFS、Syncthing、WebDAV、Navidrome
 - **下载与网盘**: qBittorrent、aria2、OpenList
 - **自建 Git**: Gitea（内网 HTTP/SSH + 公网经 Cloudflare 隧道）
+- **照片管理**: Immich（托管库 `/srv/data/photos/immich`，关闭机器学习以省内存）
 - **仪表盘**: Glance 起始页，汇总各服务入口，自带登录认证
 - **安全管理**: sops-nix 加密密钥管理、SSH 密钥认证
 - **自动化维护**: 定期垃圾回收、SMART 监控、SSD Trim
@@ -47,7 +48,7 @@
 │   ├── hardware/                      # 硬件相关（风扇、传感器）
 │   ├── network/                       # 物理口按 MAC 命名（links.nix）+ 宿主机防火墙端口表
 │   ├── gateway/                       # 网关容器组（main-router / tailscale / cloudflare-mesh / cloudflared）
-│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea
+│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea、Immich
 │   ├── security/                      # SSH、sops-nix
 │   └── users/                         # 用户配置
 ├── scripts/
@@ -289,7 +290,7 @@ btrfs device stats /srv/data
 - `modules/network/links.nix`：物理口按 MAC 锚定命名（`wan` / `lan`）
 - `modules/network/default.nix`：防火墙端口表（**按接口名匹配**，接口名改了这张表也要改）
 - 各服务的绑定地址：`samba.nix` / `nfs.nix` / `syncthing.nix` / `webdav.nix` /
-  `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix`
+  `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix` / `immich.nix`
 - `modules/gateway/tailscale.nix`：容器地址、广告的网段
 - `modules/security/ssh.nix` 的 `Match Address`
 
@@ -392,11 +393,25 @@ sudo systemctl restart gitea-admin-init
 被读到不一致状态。仓库本身（松散对象与 pack）的写入是"写完再改名"，风险低。若要求
 数据库绝对一致，改用 `services.gitea.dump`（模块自带，另出一份归档，与目录备份并行）。
 
+### Immich（照片/视频备份）
+
+`modules/services/immich.nix`。内网 `http://192.168.10.2:2283`，托管库在
+`/srv/data/photos/immich`（Btrfs RAID1，已随 `photos` 进 `nas` 备份任务，不需要另加
+备份源）。Postgres 与 Redis 都走本机 unix socket，不需要 sops 密码。
+
+机器学习默认关闭（`machine-learning.enable = false` +
+`IMMICH_MACHINE_LEARNING_ENABLED=false`）：人脸识别、智能搜索、OCR 全部不可用，
+换来少一个 Python+ONNX 常驻进程。上传、时间线、相册、按日期/文件名搜索不受影响。
+目录权限是 `immich:immich 0700`，所以虽然位于 `photos` 共享下，Samba/NFS 用户读不到。
+
+⚠️ 首次启动后到后台确认「机器学习」开关是关闭状态；Immich 自带的数据库备份默认
+每天 02:00 写进 `<mediaLocation>/backups`，会被上面的 rsync 一起带走。
+
 ### Glance 仪表盘
 
 `modules/services/glance.nix`（glanceapp/glance）是内网起始页：`monitor` widget
 汇总本机各 Web 服务入口（Glance / qBittorrent / AriaNg / OpenList / Feishin /
-Navidrome / Syncthing / Beszel / WebDAV / Gitea），可点击跳转并显示在线状态，
+Navidrome / Syncthing / Beszel / WebDAV / Gitea / Immich），可点击跳转并显示在线状态，
 另有时钟、天气（Beijing）、服务器状态。
 
 内网访问：`http://192.168.10.2:8080`，登录用户 `nas`。

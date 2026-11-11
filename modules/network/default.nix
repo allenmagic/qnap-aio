@@ -43,6 +43,7 @@
           5244    # OpenList Web UI / WebDAV（services/openlist.nix）
           3000    # Gitea Web UI（公网经 cloudflared 隧道回源）
           2222    # Gitea 自带 SSH 服务（仅内网：隧道只代理 HTTP，不代理 TCP）
+          2283    # Immich（照片/视频备份，机器学习关闭）
         ];
         allowedUDPPorts = [
           137 138 # Samba (NetBIOS)

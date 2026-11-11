@@ -139,7 +139,8 @@ VPN 通过契约（`transit.{interface,fakeIpCidrs,dnsUpstream}` + `guestModules
 ### 宿主机服务与密钥
 
 - `modules/services/`：Samba / NFS / Syncthing / WebDAV / Glance / Navidrome+Feishin / Beszel /
-  OpenList / Gitea / 下载（qBittorrent+aria2）/ 备份。**Cockpit 已删除**（含 9090 放行），Web 管理走 Glance。
+  OpenList / Gitea / Immich（机器学习关闭）/ 下载（qBittorrent+aria2）/ 备份。
+  **Cockpit 已删除**（含 9090 放行），Web 管理走 Glance。
 - sops-nix：age 私钥 `/var/lib/sops-nix/key.txt`，`defaultSopsFile` = `secrets/secrets.yaml`。
 - **网关容器的密钥注入**：宿主 sops 解密 → nspawn `--load-credential` → 容器内
   `/run/credentials/@system/<id>`（内存，不留副本）。四个密钥都带 `restartUnits`——
