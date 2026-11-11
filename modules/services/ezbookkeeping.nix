@@ -79,9 +79,10 @@ in
       EBK_LOG_LOG_FILE_ROTATE = "true";
       # 内置 MCP server：端点 http://192.168.10.2:8082/mcp，streamable-http，
       # 需要用户设置里生成的 MCP token（Authorization: Bearer ...）。
-      # 默认允许所有来源；HTTP 只绑 .2，公网要走 cloudflared 时再考虑
-      # EBK_MCP_MCP_ALLOWED_REMOTE_IPS 限制来源。
+      # 来源限制：内网 + Tailscale/Cloudflare Mesh 的 CGNAT 段 + 本机。
+      # 其他来源（例如从公网直连）一律拒绝；要增加时改这里。
       EBK_MCP_ENABLE_MCP = "true";
+      EBK_MCP_MCP_ALLOWED_REMOTE_IPS = "192.168.10.*,100.*.*.*,127.0.0.1";
       # 首次注册管理员后改成 "false"（或直接在后台关闭注册）。
       EBK_USER_ENABLE_REGISTER = "true";
     };

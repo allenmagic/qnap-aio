@@ -421,11 +421,28 @@ systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`�
 - 每晚 02:50 用 `sqlite3 .backup` 生成一致性快照到 `snapshots/`，03:00 的备份会把它
   带走。恢复时优先用快照，不要直接用可能正在写入的 `ezbookkeeping.db`。
 - 内置 MCP server 已开启：端点 `http://192.168.10.2:8082/mcp`（streamable-http）。
-  到「用户设置 → 安全 → 生成令牌」生成 MCP token，客户端加
-  `Authorization: Bearer <token>`。MCP token 与 API token 是两套令牌。
+  来源限制为 `192.168.10.*`、`100.*.*.*`（Tailscale / Cloudflare Mesh）、`127.0.0.1`。
+  到「用户设置 → 安全 → 生成令牌」生成 MCP token（CLI 等价命令：
+  `userdata user-session-new --type mcp`），客户端配置：
+
+  ```json
+  {
+    "mcpServers": {
+      "ezbookkeeping": {
+        "type": "streamable-http",
+        "url": "http://192.168.10.2:8082/mcp",
+        "headers": { "Authorization": "Bearer <token>" }
+      }
+    }
+  }
+  ```
+
+  MCP token 与 API token 是两套令牌。工具包括 `add_transaction`（支持 `dry_run`）、
+  `query_transactions`、`query_all_accounts`、`query_all_accounts_balance`、
+  `query_all_transaction_categories`、`query_all_transaction_tags`、
+  `query_latest_exchange_rates`。
 - ⚠️ 财务数据敏感：默认只绑 `.2`（内网/Tailscale）。公网暴露时要加 Cloudflare
-  Access，并考虑用 `EBK_MCP_MCP_ALLOWED_REMOTE_IPS` 限制 MCP 来源；接入第三方 LLM
-  意味着账目数据会发给该服务商。
+  Access；接入第三方 LLM 意味着账目数据会发给该服务商。
 
 ### Glance 仪表盘
 
