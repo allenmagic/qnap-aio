@@ -446,7 +446,13 @@ systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`�
   Portal 暴露的工具名带 `ezbookkeeping_` 前缀（如
   `ezbookkeeping_query_all_accounts`）；工具/提示词约每 2 小时同步一次，面板可手动
   **Sync capabilities**。直连回退：`https://account.allenmagic.cn/mcp` +
-  `Authorization: Bearer <mcp-token>`。
+  `Authorization: Bearer <mcp-token>`；Portal 故障时可临时恢复内网直连：
+
+  ```bash
+  tok=$(sops -d secrets/secrets.yaml | sed -n 's/^ezbookkeeping-mcp-token: //p')
+  claude mcp add --transport http --scope user ezbookkeeping-lan \
+    http://192.168.10.2:8082/mcp --header "Authorization: Bearer $tok"
+  ```
 
   MCP token 与 API token 是两套令牌。**当前已生成一个 90 天有效的 token**，存于 sops 的
   `ezbookkeeping-mcp-token`（`sops -d secrets/secrets.yaml` 查看）；过期后在 Web UI 重新
