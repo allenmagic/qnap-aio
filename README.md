@@ -420,31 +420,41 @@ systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`�
   公网不能自助注册，已有账号登录不受影响；改密码在 Web UI 操作。
 - 每晚 02:50 用 `sqlite3 .backup` 生成一致性快照到 `snapshots/`，03:00 的备份会把它
   带走。恢复时优先用快照，不要直接用可能正在写入的 `ezbookkeeping.db`。
-- 内置 MCP server 已开启：端点 `https://account.allenmagic.cn/mcp`（streamable-http）。
-  未限制来源 IP（cloudflared 会转发真实客户端 IP），鉴权靠 MCP token。到「用户设置 →
-  安全 → 生成令牌」生成（CLI 等价命令：
-  `userdata user-session-new --username nas --type mcp --expiresInSeconds <秒>`）。
-  客户端配置：
+- 内置 MCP server 已开启，当前通过 **Cloudflare MCP Portal** 访问：
+  - Portal：`https://mcp.allenmagic.cn/mcp`（Portal id `ezbookkeeping-portal`）
+  - 上游 server id `ezbookkeeping` → `https://account.allenmagic.cn/mcp`
+    （`auth_type=bearer`，token 为 sops 的 `ezbookkeeping-mcp-token`）
+  - Portal 的 Access service token 存在 sops 的
+    `cloudflare-mcp-access-client-id` / `cloudflare-mcp-access-client-secret`
+  - 客户端配置（Claude Code user scope）：
 
   ```json
   {
     "mcpServers": {
       "ezbookkeeping": {
         "type": "streamable-http",
-        "url": "https://account.allenmagic.cn/mcp",
-        "headers": { "Authorization": "Bearer <token>" }
+        "url": "https://mcp.allenmagic.cn/mcp",
+        "headers": {
+          "CF-Access-Client-Id": "<service-token-id>",
+          "CF-Access-Client-Secret": "<service-token-secret>"
+        }
       }
     }
   }
   ```
 
+  Portal 暴露的工具名带 `ezbookkeeping_` 前缀（如
+  `ezbookkeeping_query_all_accounts`）；工具/提示词约每 2 小时同步一次，面板可手动
+  **Sync capabilities**。直连回退：`https://account.allenmagic.cn/mcp` +
+  `Authorization: Bearer <mcp-token>`。
+
   MCP token 与 API token 是两套令牌。**当前已生成一个 90 天有效的 token**，存于 sops 的
   `ezbookkeeping-mcp-token`（`sops -d secrets/secrets.yaml` 查看）；过期后在 Web UI 重新
-  生成，或用上面的 CLI 命令（`--expiresInSeconds` 必填）。工具包括 `add_transaction`
-  （支持 `dry_run`）、
-  `query_transactions`、`query_all_accounts`、`query_all_accounts_balance`、
-  `query_all_transaction_categories`、`query_all_transaction_tags`、
-  `query_latest_exchange_rates`。
+  生成，或用：
+  `userdata user-session-new --username allenmagic --type mcp --expiresInSeconds <秒>`。
+  工具包括 `add_transaction`（支持 `dry_run`）、`query_transactions`、
+  `query_all_accounts`、`query_all_accounts_balance`、`query_all_transaction_categories`、
+  `query_all_transaction_tags`、`query_latest_exchange_rates`。
 
 **Cloudflare Tunnel 接入**（cloudflared 是 token 模式，ingress 在 CF 面板配置）：
 
@@ -452,14 +462,14 @@ systemd 服务而不是引入 Docker/Podman。内网 `http://192.168.10.2:8082`�
 > - Subdomain/Domain：`account.allenmagic.cn`
 > - Service：`HTTP` → `192.168.10.2:8082`
 
-⚠️ **Cloudflare Access 对 MCP 的影响**：Access 会先于源站拦截请求，MCP 客户端不是
-浏览器，无法走邮箱 OTP。两种做法：
+MCP Portal 的 Access 应用已配置：
+- `ezbookkeeping-mcp-bot`（Service Token，非交互客户端用）
+- `ezbookkeeping-mcp-owner`（邮箱 `zheng.youxin@gmail.com`，浏览器/交互用）
 
-1. 给 MCP 客户端用 **Access Service Token**：在 Access → Service Auth 创建 token，
-   客户端除 `Authorization: Bearer <mcp-token>` 外再加
-   `CF-Access-Client-Id` / `CF-Access-Client-Secret` 两个请求头。
-2. 给 `account.allenmagic.cn/mcp` 单独建一个 Access 应用并设为 Bypass，只靠 MCP
-   token 鉴权；这样公网只泄露 MCP token 就能访问，风险更高。
+⚠️ 当前 `account.allenmagic.cn` 本身**没有** Access，Portal 上游只用 Bearer MCP token。
+如果以后给这个域名加 Access，Portal 的上游 server 需要改成 custom headers：
+`auth_type=bearer` + `{"headers":{"Authorization":"Bearer <mcp-token>","CF-Access-Client-Id":"...","CF-Access-Client-Secret":"..."}}`，
+否则 Portal 同步/请求会被 403；或者单独给 `/mcp` 做 Bypass。
 
 Web UI 建议仍加 Access（邮箱 OTP 等）。Cloudflare 免费版请求体上限 100 MB；
 ezBookkeeping 的单文件导入上限是 10 MB，不受影响。财务数据敏感，不建议省掉 Access。
