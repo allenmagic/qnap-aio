@@ -23,6 +23,15 @@ in
     port = port;
     mediaLocation = mediaDir;
 
+    # PostgreSQL 由 services/postgresql.nix 独立拥有；这里只作为客户端连接。
+    database = {
+      enable = false;
+      createDB = false;
+      host = "/run/postgresql";
+      name = "immich";
+      user = "immich";
+    };
+
     machine-learning.enable = false;
     # 只停服务不够：server 的 IMMICH_MACHINE_LEARNING_URL 仍指向 localhost:3003，
     # 会不断派发 ML 任务并失败刷日志，所以同时把 server 侧的功能开关关掉。
@@ -31,6 +40,13 @@ in
     # 可选：N5095 核显转码。默认 [] 会启用 PrivateDevices，改为设备列表才放行；
     # 开启后还需在 Immich 后台「视频转码」里选硬件加速。
     # accelerationDevices = [ "/dev/dri/renderD128" ];
+  };
+
+  # database.enable=false 后 Immich 模块不再自动加 postgresql.target 依赖，
+  # 这里补上，避免 Immich 在 PostgreSQL 就绪前启动。
+  systemd.services.immich-server = {
+    requires = [ "postgresql.target" ];
+    after = [ "postgresql.target" ];
   };
 
   systemd.tmpfiles.rules = [

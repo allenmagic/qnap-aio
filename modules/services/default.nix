@@ -42,6 +42,8 @@ in
     ./webdav.nix
     # 自建 Git 托管：内网 HTTP + 公网经 cloudflared 隧道
     ./gitea.nix
+    # 独立 PostgreSQL 集群（Immich 等共享）
+    ./postgresql.nix
     # 照片/视频备份：托管库 /srv/data/photos/immich，机器学习关闭
     ./immich.nix
     # 个人记账：SQLite + 内置 MCP server
