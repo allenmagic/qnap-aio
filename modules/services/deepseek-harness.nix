@@ -56,6 +56,10 @@ in
     wants = [ "network-online.target" ];
     after = [ "network-online.target" ];
 
+    # 插件管理器对 github: 规格先跑 git ls-remote；systemd 默认 PATH
+    # 不含 systemPackages，缺 git 时装 GitHub 插件会报 ENOENT。
+    path = [ pkgs.git pkgs.openssh ];
+
     environment = {
       HOME = "${stateDir}/home";
       DSH_HOME = "${stateDir}/dsh";
