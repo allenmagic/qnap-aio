@@ -9,7 +9,6 @@ let
   # 大概率不再触发，但保留排序没有代价。
   bindToShim = [
     "aria2"
-    "deepseek-harness"
     "ezbookkeeping"
     "gitea"
     "glance"

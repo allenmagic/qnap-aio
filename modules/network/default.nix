@@ -45,7 +45,7 @@
           2222    # Gitea 自带 SSH 服务（仅内网：隧道只代理 HTTP，不代理 TCP）
           2283    # Immich（照片/视频备份，机器学习关闭）
           8082    # ezBookkeeping（个人记账 + 内置 MCP server）
-          3080    # DeepSeek Harness Web UI（仅 br-lan）
+          3081    # DeepSeek Harness 的 remote-mobile 认证代理（仅 br-lan）
         ];
         allowedUDPPorts = [
           137 138 # Samba (NetBIOS)

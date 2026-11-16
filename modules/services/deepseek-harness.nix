@@ -1,7 +1,8 @@
 { config, lib, pkgs, inputs, ... }:
 
 let
-  lanIp = "192.168.10.2";
+  # dsh 核心只监听回环；对局域网的服务由 dsh-remote-mobile 插件在 3081 提供。
+  bindHost = "127.0.0.1";
   port = 3080;
   stateDir = "/var/lib/deepseek-harness";
 
@@ -22,17 +23,17 @@ let
       export EZBOOKKEEPING_MCP_TOKEN="$mcp_token"
 
       exec ${lib.getExe dsh} --profile web --no-open \
-        --host ${lanIp} --port ${toString port}
+        --host ${bindHost} --port ${toString port}
     '';
   };
 in
 {
   # ===== DeepSeek Harness：局域网可访问的 agent Web UI =====
-  # dsh 会执行模型生成的命令，所以用专用用户、只监听 br-lan，并且
+  # dsh 会执行模型生成的命令，所以用专用用户、核心只监听回环，并且
   # 默认不让它看到 /srv；需要处理 NAS 文件时再单独开 workspace。
   #
-  # dsh 不接受 0.0.0.0，必须给具体地址；Host/Origin 校验接受该地址本身，
-  # 所以手机/平板直接用 http://192.168.10.2:3080 访问，不需要 --trusted-host。
+  # 局域网入口由 dsh-remote-mobile 插件提供：它检测到回环核心后启动
+  # 0.0.0.0:3081 认证代理，手机/平板通过配对码或长期密码访问。
   users.users.deepseek-harness = {
     isSystemUser = true;
     group = "deepseek-harness";
