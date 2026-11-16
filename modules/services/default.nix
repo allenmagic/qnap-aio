@@ -9,6 +9,7 @@ let
   # 大概率不再触发，但保留排序没有代价。
   bindToShim = [
     "aria2"
+    "deepseek-harness"
     "ezbookkeeping"
     "gitea"
     "glance"
@@ -48,6 +49,8 @@ in
     ./immich.nix
     # 个人记账：SQLite + 内置 MCP server
     ./ezbookkeeping.nix
+    # 本机 agent harness：Web UI 直接暴露在 br-lan（3080）
+    ./deepseek-harness.nix
     # cockpit 已删除（含其 9090 端口放行）：系统 Web 管理改用 SSH +
     # services/glance.nix 的仪表盘
     # YunShu 透明网关已移出 services/：容器化后归到

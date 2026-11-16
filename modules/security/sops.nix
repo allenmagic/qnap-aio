@@ -149,6 +149,15 @@
         restartUnits = [ "ezbookkeeping.service" ];
       };
 
+      # DeepSeek Harness 的 DeepSeek API key。切换前必须先在 secrets.yaml
+      # 添加该条目，否则 sops activation 会因缺少密钥失败；服务经
+      # LoadCredential 读取，值不要带尾换行。
+      deepseek-api-key = {
+        owner = "root";
+        mode = "0400";
+        restartUnits = [ "deepseek-harness.service" ];
+      };
+
       # Beszel agent 认证。内容来自 hub UI「Add System」给出的 SSH 公钥，
       # 为 EnvironmentFile 格式（`KEY=ssh-ed25519 AAAA...`）。
       # 由 services/beszel.nix 的 agent.environmentFile 引用（经 systemd
