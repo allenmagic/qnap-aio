@@ -67,6 +67,7 @@
                     { title = "Gitea"; url = "http://192.168.10.2:3000"; icon = "si:gitea"; }
                     { title = "Immich"; url = "http://192.168.10.2:2283"; icon = "si:immich"; }
                     { title = "ezBookkeeping"; url = "http://192.168.10.2:8082"; icon = "mdi:book-open-variant"; }
+                    { title = "DeepSeek Harness"; url = "http://192.168.10.2:3081"; icon = "si:deepseek"; alt-status-codes = [ 302 303 401 ]; }
                   ];
                 }
               ];
