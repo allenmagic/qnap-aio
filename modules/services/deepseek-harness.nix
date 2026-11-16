@@ -16,6 +16,11 @@ let
     text = ''
       api_key=$(cat "$CREDENTIALS_DIRECTORY/deepseek-api-key")
       export DEEPSEEK_API_KEY="$api_key"
+
+      # dsh 的 MCP manager 用 credential 模板引用这个变量。
+      mcp_token=$(cat "$CREDENTIALS_DIRECTORY/ezbookkeeping-mcp-token")
+      export EZBOOKKEEPING_MCP_TOKEN="$mcp_token"
+
       exec ${lib.getExe dsh} --profile web --no-open \
         --host ${lanIp} --port ${toString port}
     '';
@@ -66,7 +71,10 @@ in
       Restart = "on-failure";
       RestartSec = 5;
       TimeoutStopSec = 15;
-      LoadCredential = "deepseek-api-key:${config.sops.secrets.deepseek-api-key.path}";
+      LoadCredential = [
+        "deepseek-api-key:${config.sops.secrets.deepseek-api-key.path}"
+        "ezbookkeeping-mcp-token:${config.sops.secrets.ezbookkeeping-mcp-token.path}"
+      ];
 
       UMask = "0077";
       NoNewPrivileges = true;
