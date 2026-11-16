@@ -38,6 +38,11 @@
     '';
   };
 
+  # NixOS 只根据全局 PasswordAuthentication 生成 PAM 的 unixAuth；这里是
+  # false、靠 Match 对 LAN/Tailscale 放行密码，若不显式打开，PAM 会落到
+  # pam_deny，表现为 sshd 提示输入密码但始终认证失败。
+  security.pam.services.sshd.unixAuth = true;
+
   # SSH 密钥管理
   # 用户密钥在 users 模块中配置
 
