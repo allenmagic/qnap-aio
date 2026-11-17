@@ -44,6 +44,10 @@ let
     # 公网访问必须放行；鉴权靠 MCP token（必要时再加 Cloudflare Access）。
     EBK_MCP_ENABLE_MCP = "true";
 
+    # dsh 的 ebktools.sh 走 /api/v1 + API Token；MCP token 是另一种
+    # token 类型，不能复用。开启后可在「用户设置 → 安全」生成 API Token。
+    EBK_SECURITY_ENABLE_API_TOKEN = "true";
+
     # 管理员由 admin-init 创建，禁止公网注册。
     EBK_USER_ENABLE_REGISTER = "false";
   };

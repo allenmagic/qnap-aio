@@ -80,7 +80,8 @@ in
 
     # 插件管理器对 github: 规格先跑 git ls-remote；systemd 默认 PATH
     # 不含 systemPackages，缺 git 时装 GitHub 插件会报 ENOENT。
-    path = [ pkgs.git pkgs.openssh ];
+    # agent 执行脚本还需要 bash/python/node，同样不能依赖系统 profile。
+    path = [ pkgs.git pkgs.openssh pkgs.bash pkgs.python3 pkgs.nodejs_24 ];
 
     environment = {
       HOME = "${stateDir}/home";
