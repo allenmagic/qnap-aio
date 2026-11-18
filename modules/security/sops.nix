@@ -166,6 +166,17 @@
         restartUnits = [ "deepseek-harness.service" ];
       };
 
+      # Photoview 的 PostgreSQL 角色密码。由 photoview-db-password.service
+      # 在每次启动时写入角色；值必须是 URL 安全的 hex。
+      photoview-db-password = {
+        owner = "root";
+        mode = "0400";
+        restartUnits = [
+          "photoview-db-password.service"
+          "photoview.service"
+        ];
+      };
+
       # Beszel agent 认证。内容来自 hub UI「Add System」给出的 SSH 公钥，
       # 为 EnvironmentFile 格式（`KEY=ssh-ed25519 AAAA...`）。
       # 由 services/beszel.nix 的 agent.environmentFile 引用（经 systemd

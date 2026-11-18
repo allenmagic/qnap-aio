@@ -8,14 +8,25 @@
     enable = true;
     package = pkgs.postgresql_17;
 
-    ensureDatabases = [ "immich" ];
+    ensureDatabases = [ "immich" "photoview" ];
     ensureUsers = [
       {
         name = "immich";
         ensureDBOwnership = true;
         ensureClauses.login = true;
       }
+      {
+        name = "photoview";
+        ensureDBOwnership = true;
+        ensureClauses.login = true;
+      }
     ];
+
+    # 默认 TCP 规则是 md5，而 Photoview 的角色密码按 scram-sha-256 存储。
+    # 这条必须排在默认规则之前。
+    authentication = lib.mkBefore ''
+      host photoview photoview 127.0.0.1/32 scram-sha-256
+    '';
 
     extensions = ps: [
       ps.pgvector

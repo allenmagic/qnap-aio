@@ -13,6 +13,7 @@ let
     "gitea"
     "glance"
     "immich-server"
+    "photoview"
     "navidrome"
     "openlist"
     "qbittorrent"
@@ -46,6 +47,8 @@ in
     ./postgresql.nix
     # 照片/视频备份：托管库 /srv/data/photos/immich，机器学习关闭
     ./immich.nix
+    # 只读照片浏览：媒体 /srv/data/photos/iphone，PostgreSQL 元数据
+    ./photoview.nix
     # 个人记账：SQLite + 内置 MCP server
     ./ezbookkeeping.nix
     # 本机 agent harness：Web UI 直接暴露在 br-lan（3080）
