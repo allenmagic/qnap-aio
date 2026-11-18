@@ -84,6 +84,8 @@ do_assemble() {
         ./configuration.nix ./vm-sops-stub.nix ./vm-test.nix
         ./modules/system ./modules/network ./modules/gateway
         ./modules/security ./modules/users
+        # 只单独引入待验证的服务；不要导入整个 services 目录
+        ./modules/services/chronoframe.nix
       ];
     };
   };

@@ -22,6 +22,8 @@ let
         # 财务数据：SQLite 库 + 附件。02:50 生成的一致性快照也在 snapshots/ 下，
         # 恢复时优先用快照，而不是可能正在写入的 ezbookkeeping.db。
         { src = "/srv/data/application/ezbookkeeping"; dst = "ezbookkeeping"; }
+        # ChronoFrame：SQLite、会话密钥和本地存储的原图/预览。
+        { src = "/srv/data/application/chronoframe"; dst = "chronoframe"; }
       ];
     }
     {

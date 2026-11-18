@@ -46,6 +46,8 @@ in
     ./postgresql.nix
     # 照片/视频备份：托管库 /srv/data/photos/immich，机器学习关闭
     ./immich.nix
+    # 照片上传/浏览：官方 OCI 镜像，Podman 运行；上传需 HTTPS 或 localhost
+    ./chronoframe.nix
     # 个人记账：SQLite + 内置 MCP server
     ./ezbookkeeping.nix
     # 本机 agent harness：Web UI 直接暴露在 br-lan（3080）
