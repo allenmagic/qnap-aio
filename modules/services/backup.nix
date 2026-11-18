@@ -22,8 +22,6 @@ let
         # 财务数据：SQLite 库 + 附件。02:50 生成的一致性快照也在 snapshots/ 下，
         # 恢复时优先用快照，而不是可能正在写入的 ezbookkeeping.db。
         { src = "/srv/data/application/ezbookkeeping"; dst = "ezbookkeeping"; }
-        # Photoview 的 PostgreSQL 元数据；02:40 由 photoview-db-dump 生成。
-        { src = "/srv/data/application/photoview"; dst = "photoview-db"; }
       ];
     }
     {
