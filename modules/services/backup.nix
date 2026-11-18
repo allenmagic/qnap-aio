@@ -24,8 +24,6 @@ let
         { src = "/srv/data/application/ezbookkeeping"; dst = "ezbookkeeping"; }
         # ChronoFrame：SQLite、会话密钥和本地存储的原图/预览。
         { src = "/srv/data/application/chronoframe"; dst = "chronoframe"; }
-        # ChronoFrame 使用 OpenList 本地存储时，原图实际落在这里。
-        { src = "/srv/data/downloads/openlist/chronoframe"; dst = "chronoframe-openlist"; }
       ];
     }
     {
