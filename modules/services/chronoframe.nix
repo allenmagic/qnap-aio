@@ -33,6 +33,11 @@ in
         TZ = "Asia/Shanghai";
         NITRO_HOST = "0.0.0.0";
         NITRO_PORT = toString port;
+        # 浏览器对 .HEIC 可能给出空 MIME，上传端会回落为
+        # application/octet-stream；白名单里补上它，避免 HEIC 被 415 拒绝。
+        NUXT_UPLOAD_MIME_WHITELIST =
+          "image/jpeg,image/png,image/webp,image/gif,image/bmp,image/tiff,image/heic,image/heif,video/quicktime,video/mp4,application/octet-stream";
+        NUXT_UPLOAD_MIME_WHITELIST_ENABLED = "false";
       };
     };
   };
