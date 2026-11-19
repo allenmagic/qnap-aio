@@ -66,6 +66,7 @@
                     { title = "WebDAV"; url = "http://192.168.10.2:4918"; icon = "mdi:folder-network"; alt-status-codes = [ 401 ]; }
                     { title = "Gitea"; url = "http://192.168.10.2:3000"; icon = "si:gitea"; }
                     { title = "ChronoFrame"; url = "http://192.168.10.2:3001"; icon = "mdi:image-multiple"; }
+                    { title = "Vaultwarden"; url = "https://vault.allenmagic.cn"; icon = "si:bitwarden"; alt-status-codes = [ 302 303 ]; }
                     { title = "ezBookkeeping"; url = "http://192.168.10.2:8082"; icon = "mdi:book-open-variant"; }
                     { title = "DeepSeek Harness"; url = "http://192.168.10.2:3081"; icon = "si:deepseek"; alt-status-codes = [ 302 303 401 ]; }
                   ];

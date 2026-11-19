@@ -16,6 +16,7 @@ let
     "openlist"
     "qbittorrent"
     "syncthing"
+    "vaultwarden"
     "webdav"
   ];
 in
@@ -41,6 +42,8 @@ in
     ./webdav.nix
     # 自建 Git 托管：内网 HTTP + 公网经 cloudflared 隧道
     ./gitea.nix
+    # 密码库：Bitwarden 兼容，公网经 cloudflared 隧道
+    ./vaultwarden.nix
     # 独立 PostgreSQL 集群（目前无服务使用）
     ./postgresql.nix
     # 照片上传/浏览：官方 OCI 镜像，Podman 运行；上传需 HTTPS 或 localhost

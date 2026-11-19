@@ -45,6 +45,7 @@
           3001    # ChronoFrame（照片上传/浏览；HTTP 下仅能浏览，上传需 HTTPS/localhost）
           2222    # Gitea 自带 SSH 服务（仅内网：隧道只代理 HTTP，不代理 TCP）
           8082    # ezBookkeeping（个人记账 + 内置 MCP server）
+          8222    # Vaultwarden（密码库；公网经 cloudflared 隧道回源）
           3081    # DeepSeek Harness 的 remote-mobile 认证代理（仅 br-lan）
         ];
         allowedUDPPorts = [

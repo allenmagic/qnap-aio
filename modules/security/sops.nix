@@ -196,6 +196,16 @@
         mode = "0400";
       };
 
+      # Vaultwarden 管理面板 token。内容为 EnvironmentFile 格式：
+      #   ADMIN_TOKEN=<随机串>
+      # 由 services/vaultwarden.nix 的 environmentFile 引用（systemd 以 root 读取）。
+      # 值不要带尾换行；轮换后需重启 vaultwarden.service。
+      vaultwarden-admin-token = {
+        owner = "root";
+        mode = "0400";
+        restartUnits = [ "vaultwarden.service" ];
+      };
+
       # aria2 JSON-RPC 密钥（明文随机串）。由 services.aria2 的 rpcSecretFile
       # 经 systemd LoadCredential 读取（PID 1 以 root 读，故 owner=root）。
       # AriaNg 首次打开时填这个值即可。

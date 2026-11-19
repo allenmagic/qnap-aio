@@ -13,6 +13,7 @@
 - **存储服务**: Samba、NFS、Syncthing、WebDAV、Navidrome
 - **下载与网盘**: qBittorrent、aria2、OpenList
 - **自建 Git**: Gitea（内网 HTTP/SSH + 公网经 Cloudflare 隧道）
+- **密码库**: Vaultwarden（Bitwarden 兼容，经 Cloudflare Tunnel 暴露）
 - **照片备份**: iPhone 经 SyncUp 客户端 + Syncthing 落到 `/srv/data/photos/iphone-sync`
 - **个人记账**: ezBookkeeping（SQLite + 内置 MCP server，供 AI 客户端读写账目）
 - **仪表盘**: Glance 起始页，汇总各服务入口，自带登录认证
@@ -49,7 +50,7 @@
 │   ├── hardware/                      # 硬件相关（风扇、传感器）
 │   ├── network/                       # 物理口按 MAC 命名（links.nix）+ 宿主机防火墙端口表
 │   ├── gateway/                       # 网关容器组（main-router / tailscale / cloudflare-mesh / cloudflared）
-│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea、ezBookkeeping
+│   ├── services/                      # Samba、NFS、Syncthing、WebDAV、Glance、Navidrome、下载、OpenList、Gitea、Vaultwarden、ezBookkeeping
 │   ├── security/                      # SSH、sops-nix
 │   └── users/                         # 用户配置
 ├── scripts/
@@ -291,7 +292,7 @@ btrfs device stats /srv/data
 - `modules/network/links.nix`：物理口按 MAC 锚定命名（`wan` / `lan`）
 - `modules/network/default.nix`：防火墙端口表（**按接口名匹配**，接口名改了这张表也要改）
 - 各服务的绑定地址：`samba.nix` / `nfs.nix` / `syncthing.nix` / `webdav.nix` /
-  `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix` /
+  `glance.nix` / `music*.nix` / `downloads.nix` / `openlist.nix` / `vaultwarden.nix` /
   `ezbookkeeping.nix`
 - `modules/gateway/tailscale.nix`：容器地址、广告的网段
 - `modules/security/ssh.nix` 的 `Match Address`
@@ -394,6 +395,17 @@ sudo systemctl restart gitea-admin-init
 备份一致性：`/srv/data/application/gitea` 是按目录整体 rsync 的，sqlite 库在实例运行时有小概率
 被读到不一致状态。仓库本身（松散对象与 pack）的写入是"写完再改名"，风险低。若要求
 数据库绝对一致，改用 `services.gitea.dump`（模块自带，另出一份归档，与目录备份并行）。
+
+### Vaultwarden（密码库）
+
+`modules/services/vaultwarden.nix`。Bitwarden 兼容，SQLite；数据 bind 到
+`/srv/data/application/vaultwarden`，模块每天 23:00 做 SQLite 一致性备份到
+`/srv/data/application/vaultwarden-backup`。只监听内网 `192.168.10.2:8222`，公网经
+cloudflared 隧道：Cloudflare 面板 Public Hostname 指到 `http://192.168.10.2:8222`，
+客户端用 `https://vault.allenmagic.cn`。
+
+Bitwarden 客户端强制有效 HTTPS，**不要套 Cloudflare Access**（客户端无法完成浏览器 SSO）。
+首个账号用 `/admin` 面板邀请，`ADMIN_TOKEN` 在 sops 的 `vaultwarden-admin-token`。
 
 ### iPhone 照片备份（SyncUp + Syncthing）
 

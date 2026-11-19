@@ -26,6 +26,10 @@ let
         { src = "/srv/data/application/chronoframe"; dst = "chronoframe"; }
         # Syncthing：设备 ID、证书/私钥和文件夹配置；笔记本身在 documents 下。
         { src = "/srv/data/application/syncthing"; dst = "syncthing"; }
+        # Vaultwarden：SQLite 库、附件和 RSA 密钥。-backup 是模块每天 23:00
+        # 生成的 SQLite 一致性备份，恢复时优先用它，而不是运行中的 db。
+        { src = "/srv/data/application/vaultwarden"; dst = "vaultwarden"; }
+        { src = "/srv/data/application/vaultwarden-backup"; dst = "vaultwarden-backup"; }
       ];
     }
     {
