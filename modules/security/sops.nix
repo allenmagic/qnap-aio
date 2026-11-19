@@ -97,16 +97,10 @@
       #
       # secrets.yaml 内容示例：
       #   tailscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx
-      #   headscale-auth-key: tskey-auth-xxxxxxxxxxxxxxxx（自建控制面 hs.zyx1986.icu）
-      #   headscale-ecs-auth-key: hskey-auth-xxxxxxxxxxxxxxxx（新控制面 hs.allenmagic.cn:8443，迁移用）
+      #   headscale-ecs-auth-key: hskey-auth-xxxxxxxxxxxxxxxx（新控制面 hs.allenmagic.cn:8443）
       #   cloudflared-token: eyJhIjoi...
       #   cloudflare-mesh-token: eyJhIjoi...（面板 Networking > Mesh > Add node）
       tailscale-auth-key = {
-        owner = "root";
-        mode = "0400";
-        restartUnits = [ "container@tailscale" ];
-      };
-      headscale-auth-key = {
         owner = "root";
         mode = "0400";
         restartUnits = [ "container@tailscale" ];

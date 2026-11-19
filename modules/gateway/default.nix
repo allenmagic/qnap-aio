@@ -4,7 +4,7 @@
   # 网关容器组（改造目标见 docs/gateway.md）
   #
   #   main-router  .1   br-lan(veth) + wan(macvlan)   网关 + DNS + DHCP
-  #   tailscale    .4   br-lan                  官方 + 自建 headscale 两实例
+  #   tailscale    .4   br-lan                  官方 Tailscale 实例
   #   cloudflare-mesh .5 br-lan                 Mesh 节点（L3 双向，原 WARP Connector）
   #   cloudflared  .6   br-lan                  内网穿透（token 模式）
   #   ts-ecs        .7  br-lan                  迁移实例：aliyun-ecs 新 headscale

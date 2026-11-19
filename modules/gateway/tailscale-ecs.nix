@@ -1,6 +1,6 @@
 # ts-ecs —— 连接 aliyun-ecs 新 headscale 的迁移实例
 #
-# 与现有 tailscale 容器（官方 + 旧 headscale hs.zyx1986.icu）完全隔离：
+# 与 tailscale 容器中的官方实例完全隔离：
 #   br-lan ──> lan  192.168.10.7/24   LAN（单口，默认网关 .1）
 #
 # 迁移期间两个容器并存，旧实例不动，新实例独立注册到

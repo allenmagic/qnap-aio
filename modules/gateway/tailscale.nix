@@ -1,15 +1,10 @@
-# tailscale —— 两个 tailscale 实例合并在一个容器里
+# tailscale —— 官方 Tailscale 实例
 #
 #   br-lan ──> lan     192.168.10.4/24   LAN（单口，出站直连）
 #
-# 两个实例互为独立 tailnet，不是主备关系（Tailscale 没有 failover 语义）：
-#   - 官方控制面：接口 tailscale0，UDP 41641
-#   - 自建 Headscale：接口 ts0，UDP 41642，控制面 hs.zyx1986.icu
-#
-# ⚠️ 两个实例都广告 192.168.10.0/24。这是现状的延续（router-image 的
-# network.env 里 TS_ADVERTISE_ROUTES 与 HEADSCALE_ADVERTISE_ROUTES 相同），
-# 但两个 tailnet 的客户端会各自看到一条重叠路由——它们分属不同 tailnet，
-# 互不影响；别把两个实例理解成"同一张网里的两个出口"。
+# 官方控制面：接口 tailscale0，UDP 41641。
+# 旧的 Headscale 实例（hs.zyx1986.icu）已移除；新的 aliyun-ecs Headscale
+# 在 ts-ecs 容器中，见 modules/gateway/tailscale-ecs.nix。
 
 { config, lib, pkgs, ... }:
 
@@ -24,8 +19,6 @@ let
 
   # 沿用 router-image/network.env 里的设备名，保持 tailnet 里的身份连续
   tsHostname = "router-vm";
-  hsHostname = "nixos-router-vm-hs";
-  hsControlUrl = "https://hs.zyx1986.icu";
 
   # 密钥不落盘：sops 在宿主解密 → nspawn --load-credential 注入容器 PID 1 的
   # 凭据目录 → 下面直接从这里读。容器内不写任何持久副本。
@@ -44,7 +37,7 @@ in
     };
     script = ''
       install -d -m 755 ${stateDir}
-      install -d -m 700 ${stateDir}/official ${stateDir}/headscale
+      install -d -m 700 ${stateDir}/official
     '';
   };
 
@@ -60,17 +53,12 @@ in
 
     extraFlags = [
       "--load-credential=ts-authkey:${config.sops.secrets.tailscale-auth-key.path}"
-      "--load-credential=hs-authkey:${config.sops.secrets.headscale-auth-key.path}"
     ];
 
     # 节点身份持久化：容器重建/重启不重新注册，免去反复重新审批 subnet route
     bindMounts = {
       "/var/lib/tailscale" = {
         hostPath = "${stateDir}/official";
-        isReadOnly = false;
-      };
-      "/var/lib/headscale" = {
-        hostPath = "${stateDir}/headscale";
         isReadOnly = false;
       };
     };
@@ -111,9 +99,7 @@ in
         resolvconf.enable = false;
 
         firewall = {
-          # 官方实例的 41641 由 services.tailscale.openFirewall 打开；
-          # 41642 是 headscale 实例的，得自己加
-          allowedUDPPorts = [ 41642 ];
+          # 41641 由 services.tailscale.openFirewall 打开。
           allowedTCPPorts = [ 22 ]; # 远程经 tailnet SSH 进来
         };
       };
@@ -134,7 +120,7 @@ in
         "net.ipv6.conf.default.disable_ipv6" = 1;
       };
 
-      # subnet router 的 SNAT。两个实例都设了 netfilter-mode=off，tailscaled
+      # subnet router 的 SNAT。tailscaled 设了 netfilter-mode=off，
       # 于是不装任何 NAT 规则；缺了它，LAN 主机的回包会发给默认网关（.1），
       # 而网关没有 100.64.0.0/10 的路由 → subnet routing 整个不通。
       # 不给 tailscale 接管 nftables，只显式补这一条。
@@ -175,55 +161,6 @@ in
         ];
       };
 
-      # ── 自建 Headscale 实例（ts0 / 41642）───────────────────────────
-      # 官方模块不支持多实例，所以这一份手写；与上面保持同样的
-      # "tailscaled 常驻 + up 登录 + set 收尾"结构。
-      systemd.services."tailscaled-headscale" = {
-        description = "tailscaled（自建 Headscale 控制面，第二实例 ts0）";
-        wantedBy = [ "multi-user.target" ];
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
-        serviceConfig = {
-          ExecStart = "${pkgs.tailscale}/bin/tailscaled --state=/var/lib/headscale/tailscaled.state --socket=/run/headscale/tailscaled.sock --port=41642 --tun=ts0";
-          StateDirectory = "headscale";
-          RuntimeDirectory = "headscale";
-          Restart = "on-failure";
-        };
-      };
-
-      systemd.services."tailscale-headscale-autoconnect" = {
-        description = "登录自建 Headscale 并广告 LAN 网段";
-        wantedBy = [ "multi-user.target" ];
-        after = [
-          "tailscaled-headscale.service"
-          "network-online.target"
-        ];
-        wants = [ "network-online.target" ]; # after 了就要依赖，否则 systemd 告警
-        requires = [ "tailscaled-headscale.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          ExecStart = pkgs.writeShellScript "headscale-autoconnect" ''
-            set -eu
-            ts=${pkgs.tailscale}/bin/tailscale
-            sock=/run/headscale/tailscaled.sock
-
-            # --auth-key 只用于首次注册；节点身份在 /var/lib/headscale 里持久，
-            # 之后重启不再需要它（但留着无害，重新注册时才用得上）。
-            # ⚠️ netfilter-mode / accept-dns 必须写在 up 里，不能事后用 set 补：
-            #    节点上已经存在这两个非默认设置后，下次开机的 up 会因为
-            #    "requires mentioning all non-default flags" 直接报错退出。
-            "$ts" --socket="$sock" up \
-              --auth-key "$(cat ${credDir}/hs-authkey)" \
-              --login-server=${hsControlUrl} \
-              --hostname=${hsHostname} \
-              --advertise-routes=${advertiseRoute} \
-              --accept-routes \
-              --netfilter-mode=off \
-              --accept-dns=false
-          '';
-        };
-      };
     };
   };
 }
