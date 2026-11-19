@@ -9,7 +9,8 @@ in
   # https://vault.allenmagic.cn 对外——Bitwarden 客户端强制要求有效 HTTPS。
   services.vaultwarden = {
     enable = true;
-    domain = "https://vault.allenmagic.cn";
+    # 这里只写主机名，模块会自己拼 https://
+    domain = "vault.allenmagic.cn";
     dbBackend = "sqlite";
     backupDir = backupDir;
 
@@ -31,6 +32,9 @@ in
   # 模块把数据写死在 /var/lib/vaultwarden；bind 到 /srv/data 才能进 RAID1 与备份
   systemd.tmpfiles.rules = [
     "d ${dataDir} 0750 vaultwarden vaultwarden -"
+    # 首次启动时备份单元先于 vaultwarden 运行，数据目录为空会让 backup.sh
+    # 的 cp 通配失败；放一个占位文件保证备份脚本始终有内容可复制
+    "f ${dataDir}/.keep 0600 vaultwarden vaultwarden -"
   ];
   systemd.services.vaultwarden.serviceConfig = {
     BindPaths = [ "${dataDir}:/var/lib/vaultwarden" ];
