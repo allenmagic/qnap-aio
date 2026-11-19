@@ -12,7 +12,6 @@ let
     "ezbookkeeping"
     "gitea"
     "glance"
-    "immich-server"
     "navidrome"
     "openlist"
     "qbittorrent"
@@ -42,10 +41,8 @@ in
     ./webdav.nix
     # 自建 Git 托管：内网 HTTP + 公网经 cloudflared 隧道
     ./gitea.nix
-    # 独立 PostgreSQL 集群（Immich 等共享）
+    # 独立 PostgreSQL 集群（目前无服务使用）
     ./postgresql.nix
-    # 照片/视频备份：托管库 /srv/data/photos/immich，机器学习关闭
-    ./immich.nix
     # 照片上传/浏览：官方 OCI 镜像，Podman 运行；上传需 HTTPS 或 localhost
     ./chronoframe.nix
     # 个人记账：SQLite + 内置 MCP server
