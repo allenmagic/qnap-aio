@@ -24,6 +24,8 @@ let
         { src = "/srv/data/application/ezbookkeeping"; dst = "ezbookkeeping"; }
         # ChronoFrame：SQLite、会话密钥和本地存储的原图/预览。
         { src = "/srv/data/application/chronoframe"; dst = "chronoframe"; }
+        # Syncthing：设备 ID、证书/私钥和文件夹配置；笔记本身在 documents 下。
+        { src = "/srv/data/application/syncthing"; dst = "syncthing"; }
       ];
     }
     {
