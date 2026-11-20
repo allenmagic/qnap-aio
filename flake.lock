@@ -34,11 +34,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1788881743,
-        "narHash": "sha256-2V9GZGvPfrNzxFozhI9dcqV+c3QdA8YZrvAAzqEB+dI=",
+        "lastModified": 1794890597,
+        "narHash": "sha256-lME2lHoDHAaSHP3/okgiVoJ0icVEvsQH8LeU3We7tcc=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "d6524aaca2ff07876657ae2b323f24be4874944b",
+        "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
         "type": "github"
       },
       "original": {
@@ -86,11 +86,11 @@
         "qnap8528": "qnap8528"
       },
       "locked": {
-        "lastModified": 1789650522,
-        "narHash": "sha256-COKieWZfo3mi/b5Bwl48EC1dzNus4t5a7Azj318ZF/E=",
+        "lastModified": 1795150574,
+        "narHash": "sha256-0Jw7GSIHPer1ADkR3WtLAm7OSQx5lX1QzM2d5ej9BCQ=",
         "owner": "allenmagic",
         "repo": "qnap-kernel",
-        "rev": "346f434bfb59c74c96a3c125efcb6909fd9387d6",
+        "rev": "e97597a83d29e5b0f9b64451ebde2d95913fac83",
         "type": "github"
       },
       "original": {
