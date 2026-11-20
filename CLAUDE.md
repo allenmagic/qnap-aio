@@ -43,8 +43,8 @@ sops secrets/secrets.yaml                         # 编辑加密密钥（需要 
 - VM 能验接口/地址/桥/容器启动/状态挂载（**机制**），验不了内核相关项与 YunShu
   分流（VM 里没有登录态）。2026-09-18 那次：四个 bug 里三个是 VM 拦下的。
 
-**flake.lock 已提交并锁定依赖**（nixos-26.05）。CI（`.github/workflows/`）在每次 push 跑
-`nix flake check` + 宿主机 dry-run build。
+**flake.lock 已提交并锁定依赖**（`main` = nixos-26.05，`unstable` 分支 = nixos-unstable）。
+CI（`.github/workflows/`）在 push/PR 到 `main` 时跑 `nix flake check` + 宿主机 dry-run build。
 
 ## 架构
 
