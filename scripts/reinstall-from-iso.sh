@@ -111,6 +111,24 @@ DISK_REAL=$(readlink -f "$DISK")
 DEV=$(basename "$DISK_REAL")
 [ -d "/sys/block/$DEV" ] || die "$DISK_REAL 不是整盘设备"
 
+case "$DEV" in
+  mmcblk*)
+    die "拒绝把 eMMC/DOM（$DEV）当作系统盘；确有需要请手工分区"
+    ;;
+esac
+
+SIZE_BYTES=$(lsblk -dnbo SIZE "$DISK_REAL" 2>/dev/null || echo 0)
+[ "${SIZE_BYTES:-0}" -ge 8589934592 ] || die "目标盘容量异常，疑似 U 盘或启动介质"
+
+# 防止在已安装系统里误跑：目标盘是当前根盘时直接拒绝
+ROOT_SRC=$(findmnt -no SOURCE / 2>/dev/null || true)
+if [ -n "$ROOT_SRC" ] && [ -b "$ROOT_SRC" ]; then
+  ROOT_DISK=$(lsblk -no PKNAME "$ROOT_SRC" 2>/dev/null | head -n1 || true)
+  if [ -n "$ROOT_DISK" ] && [ "/dev/$ROOT_DISK" = "$DISK_REAL" ]; then
+    die "目标盘是当前运行系统的根盘（$ROOT_SRC），拒绝执行"
+  fi
+fi
+
 eval "$(lsblk -dn -P -o MODEL,SERIAL,SIZE,RM "$DISK_REAL")"
 RM=${RM:-0}
 
