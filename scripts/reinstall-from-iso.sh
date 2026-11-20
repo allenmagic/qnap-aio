@@ -21,6 +21,7 @@ usage() {
   --expect-serial <s>   目标盘序列号；与 lsblk 不符则立即退出
   --yes                 非交互确认；仍必须同时给 --expect-serial
   --no-root-passwd      传给 nixos-install，跳过设置 root 密码
+  --root-hash-file <f>  从文件读取 crypt 哈希并写入新系统 root 密码（自动跳过交互）
   --no-rootstate        跳过 root-state 恢复（不推荐）
   --inputs-dir <dir>    离线 flake 输入目录（nixpkgs/…）；没有代理时强烈推荐
   --proxy <url>         为 nixos-install 设置 http(s)_proxy（仅在仍有代理时使用）
@@ -50,6 +51,7 @@ BRANCH="main"
 EXPECT_SERIAL=""
 YES=0
 NO_ROOT_PASSWD=0
+ROOT_HASH_FILE=""
 NO_ROOTSTATE=0
 INPUTS_DIR=""
 PROXY=""
@@ -71,6 +73,7 @@ while [ $# -gt 0 ]; do
     --proxy) PROXY=${2:?}; shift 2 ;;
     --yes) YES=1; shift ;;
     --no-root-passwd) NO_ROOT_PASSWD=1; shift ;;
+    --root-hash-file) ROOT_HASH_FILE=${2:?}; shift 2 ;;
     --no-rootstate) NO_ROOTSTATE=1; shift ;;
     --allow-removable) ALLOW_REMOVABLE=1; shift ;;
     --allow-missing-data) ALLOW_MISSING_DATA=1; shift ;;
@@ -108,6 +111,15 @@ if [ "$NO_ROOTSTATE" -eq 0 ]; then
 fi
 if [ -n "$INPUTS_DIR" ]; then
   [ -d "$INPUTS_DIR" ] || die "找不到离线输入目录：$INPUTS_DIR"
+fi
+if [ -n "$ROOT_HASH_FILE" ]; then
+  [ -f "$ROOT_HASH_FILE" ] || die "找不到 root 哈希文件：$ROOT_HASH_FILE"
+  ROOT_HASH=$(tr -d '\r\n' < "$ROOT_HASH_FILE")
+  case "$ROOT_HASH" in
+    '$'*'$'*) ;;
+    *) die "root 哈希文件内容不像 crypt 哈希（应为 \$6\$… 或 \$y\$…）" ;;
+  esac
+  NO_ROOT_PASSWD=1
 fi
 
 # ── 目标盘识别与安全门 ───────────────────────────────────────────────
@@ -180,6 +192,7 @@ cat <<EOF
   安装分支   : $BRANCH
   仓库 bundle: $BUNDLE
   离线输入   : ${INPUTS_DIR:-未提供（需要能访问 GitHub）}
+  root 密码  : $([ -n "$ROOT_HASH_FILE" ] && echo '从哈希文件注入' || { [ "$NO_ROOT_PASSWD" -eq 1 ] && echo '跳过' || echo '安装时交互设置'; })
   root-state : $([ "$NO_ROOTSTATE" -eq 1 ] && echo '跳过' || echo "$ROOTSTATE")
   数据盘     : data / backup / cache 保持不动
 EOF
@@ -313,6 +326,22 @@ cd /mnt/etc/nixos
 nixos-install "${install_args[@]}" \
   --option substituters "$SUBS" \
   --option extra-trusted-public-keys "$KEYS"
+
+# nixos-install 没有“从文件读密码”的选项；这里直接把哈希写进新系统 shadow
+if [ -n "$ROOT_HASH_FILE" ]; then
+  [ -f /mnt/etc/shadow ] || die "新系统没有 /etc/shadow，无法注入 root 密码"
+  awk -F: '$1=="root"{found=1} END{exit !found}' /mnt/etc/shadow \
+    || die "shadow 中没有 root 条目"
+  tmp=$(mktemp /mnt/etc/.shadow.XXXXXX)
+  awk -F: -v h="$ROOT_HASH" 'BEGIN{OFS=":"} $1=="root"{$2=h} {print}' \
+    /mnt/etc/shadow > "$tmp"
+  chmod --reference=/mnt/etc/shadow "$tmp"
+  chown --reference=/mnt/etc/shadow "$tmp"
+  mv "$tmp" /mnt/etc/shadow
+  got=$(awk -F: '$1=="root"{print $2}' /mnt/etc/shadow)
+  [ "$got" = "$ROOT_HASH" ] || die "root 密码哈希写入失败"
+  info "root 密码哈希已写入新系统"
+fi
 
 info "安装完成"
 cat <<'EOF'
