@@ -98,7 +98,7 @@ in
   # PT 站基本都放行它；aria2 常因客户端行为上报不合规被 PT 站封禁，所以两者分工。
   services.qbittorrent = {
     enable = true;
-    package = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.qbittorrent-nox;
+    package = pkgs.qbittorrent-nox;
     user = "nas";
     group = "nas";
     webuiPort = 8081;

@@ -2,9 +2,8 @@
   description = "QNAP TS-564 一体化网关宿主（NixOS + systemd-nspawn 网关容器）";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    # 仅用于 qbittorrent-nox 5.3.0（bitsy WebUI 按 5.3 制作；26.05 里是 5.2.2）
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # unstable 分支：跟随 nixos-unstable（lock 钉在已验证的 rev）
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     qnap8528.url = "github:allenmagic/qnap8528";
     qnap-kernel.url = "github:allenmagic/qnap-kernel";
     sops-nix = {

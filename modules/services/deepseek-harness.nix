@@ -9,9 +9,7 @@ let
   # profiles/cache 等仍留 SSD。
   dataDir = "/srv/data/application/deepseek-harness";
 
-  # deepseek-harness 只在 unstable 里；qnap-aio 已有 unstable input，
-  # 不更新 flake.lock 也能用当前锁定版本（0.2.1-rc.3）。
-  dsh = inputs.nixpkgs-unstable.legacyPackages.${pkgs.stdenv.hostPlatform.system}.deepseek-harness;
+  dsh = pkgs.deepseek-harness;
 
   # API key 通过 systemd credential 传入，不落 nix store / 环境文件。
   start = pkgs.writeShellApplication {

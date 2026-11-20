@@ -86,7 +86,6 @@ in
         HTTP_ADDR = lanIp;
         HTTP_PORT = httpPort;
 
-        DOMAIN = publicHost;
         ROOT_URL = "https://${publicHost}/";
 
         # SSH_DOMAIN 必须钉内网 IP：隧道只代理 HTTP，跟随 DOMAIN 会给出

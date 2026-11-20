@@ -1,6 +1,11 @@
 { config, pkgs, lib, ... }:
 
 {
+  # kmscon 硬件加速依赖 graphics 栈
+  hardware.graphics.enable = true;
+  # 字体按优先级回退：拉丁用等宽 DejaVu Sans Mono，中文回退到 Noto Sans CJK SC
+  fonts.packages = [ pkgs.dejavu_fonts pkgs.noto-fonts-cjk-sans ];
+
   # 物理控制台（HDMI）中文显示：
   # 内核 fbcon 只支持拉丁位图字体，无法渲染 CJK；kmscon 是用户态终端模拟器，
   # 通过 fontconfig 渲染字体，配合 Noto Sans CJK 实现控制台中文显示。
@@ -9,23 +14,11 @@
   # 开机早期（initrd/急救 shell）仍由内核 fbcon 接管（见 configuration.nix 的 console.font）。
   services.kmscon = {
     enable = true;
-    hwRender = true;  # 硬件加速渲染
-
-    # 字体按优先级回退：拉丁用等宽 DejaVu Sans Mono，中文回退到 Noto Sans CJK SC
-    fonts = [
-      {
-        name = "DejaVu Sans Mono";
-        package = pkgs.dejavu_fonts;
-      }
-      {
-        name = "Noto Sans CJK SC";
-        package = pkgs.noto-fonts-cjk-sans;
-      }
-    ];
-
-    extraConfig = ''
-      font-size=14
-      xkb-layout=us
-    '';
+    config = {
+      hwaccel = true;
+      font-name = "DejaVu Sans Mono";
+      font-size = 14;
+      xkb-layout = "us";
+    };
   };
 }

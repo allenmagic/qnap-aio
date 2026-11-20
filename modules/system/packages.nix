@@ -49,8 +49,8 @@
     bzip2
   ];
 
-  # 启用命令未找到提示
-  programs.command-not-found.enable = true;
+  # flake 的 nixpkgs 源里没有 programs.sqlite，unstable 下开启会直接求值失败
+  programs.command-not-found.enable = false;
 
   # Bash 配置
   programs.bash = {
