@@ -22,7 +22,8 @@ usage() {
   --yes                 非交互确认；仍必须同时给 --expect-serial
   --no-root-passwd      传给 nixos-install，跳过设置 root 密码
   --no-rootstate        跳过 root-state 恢复（不推荐）
-  --proxy <url>         为 nixos-install 设置 http(s)_proxy
+  --inputs-dir <dir>    离线 flake 输入目录（nixpkgs/…）；没有代理时强烈推荐
+  --proxy <url>         为 nixos-install 设置 http(s)_proxy（仅在仍有代理时使用）
   --allow-removable     允许目标盘 reported as removable（USB 转接时）
   --allow-missing-data  允许找不到 data/backup/cache 标签（仅调试）
   --dry-run             完成所有检查并打印计划，不做任何写入
@@ -50,6 +51,7 @@ EXPECT_SERIAL=""
 YES=0
 NO_ROOT_PASSWD=0
 NO_ROOTSTATE=0
+INPUTS_DIR=""
 PROXY=""
 ALLOW_REMOVABLE=0
 ALLOW_MISSING_DATA=0
@@ -65,6 +67,7 @@ while [ $# -gt 0 ]; do
     --rootstate) ROOTSTATE=${2:?}; shift 2 ;;
     --branch) BRANCH=${2:?}; shift 2 ;;
     --expect-serial) EXPECT_SERIAL=${2:?}; shift 2 ;;
+    --inputs-dir) INPUTS_DIR=${2:?}; shift 2 ;;
     --proxy) PROXY=${2:?}; shift 2 ;;
     --yes) YES=1; shift ;;
     --no-root-passwd) NO_ROOT_PASSWD=1; shift ;;
@@ -102,6 +105,9 @@ fi
 [ -f "$BUNDLE" ] || die "找不到 bundle：$BUNDLE"
 if [ "$NO_ROOTSTATE" -eq 0 ]; then
   [ -f "$ROOTSTATE" ] || die "找不到 root-state 归档：$ROOTSTATE"
+fi
+if [ -n "$INPUTS_DIR" ]; then
+  [ -d "$INPUTS_DIR" ] || die "找不到离线输入目录：$INPUTS_DIR"
 fi
 
 # ── 目标盘识别与安全门 ───────────────────────────────────────────────
@@ -173,6 +179,7 @@ cat <<EOF
   分区方案   : GPT，1GiB ESP（label boot）+ 剩余 ext4（label nixos）
   安装分支   : $BRANCH
   仓库 bundle: $BUNDLE
+  离线输入   : ${INPUTS_DIR:-未提供（需要能访问 GitHub）}
   root-state : $([ "$NO_ROOTSTATE" -eq 1 ] && echo '跳过' || echo "$ROOTSTATE")
   数据盘     : data / backup / cache 保持不动
 EOF
@@ -228,6 +235,52 @@ rm -rf /mnt/etc/nixos
 git clone --branch "$BRANCH" "$BUNDLE" /mnt/etc/nixos
 mv /tmp/hwconf/hardware-configuration.nix /mnt/etc/nixos/
 ( cd /mnt/etc/nixos && git add -N -f hardware-configuration.nix )
+
+# ── 离线锁定 flake 输入（无代理时用）──────────────────────────────────
+if [ -n "$INPUTS_DIR" ]; then
+  cp /mnt/etc/nixos/flake.lock /tmp/flake.lock.qnap-aio.orig
+  restore_flake_lock() {
+    [ -f /tmp/flake.lock.qnap-aio.orig ] && \
+      cp /tmp/flake.lock.qnap-aio.orig /mnt/etc/nixos/flake.lock || true
+  }
+  trap restore_flake_lock EXIT
+
+  overrides=()
+  ov() {
+    local name=$1 dir=$2
+    [ -d "$INPUTS_DIR/$dir" ] || die "离线输入缺少目录：$dir"
+    overrides+=(--override-input "$name" "path:$INPUTS_DIR/$dir")
+  }
+
+  ov nixpkgs nixpkgs
+  if [ -d "$INPUTS_DIR/nixpkgs-unstable" ]; then
+    ov nixpkgs-unstable nixpkgs-unstable
+  fi
+  for i in sops-nix qnap8528 qnap-kernel router-container; do
+    ov "$i" "$i"
+  done
+  ov qnap-kernel/qnap8528 qnap8528
+  ov router-container/yunshu-nix yunshu-nix
+
+  if [ -d "$INPUTS_DIR/nixpkgs-qnap-kernel" ]; then
+    ov qnap-kernel/nixpkgs nixpkgs-qnap-kernel
+  else
+    ov qnap-kernel/nixpkgs nixpkgs
+  fi
+
+  if [ -d "$INPUTS_DIR/nixpkgs-qnap8528" ]; then
+    ov qnap8528/nixpkgs nixpkgs-qnap8528
+    ov qnap-kernel/qnap8528/nixpkgs nixpkgs-qnap8528
+  else
+    ov qnap8528/nixpkgs nixpkgs
+    ov qnap-kernel/qnap8528/nixpkgs nixpkgs
+  fi
+
+  info "离线锁定 flake 输入（不访问 GitHub）"
+  ( cd /mnt/etc/nixos && \
+    nix --extra-experimental-features 'nix-command flakes' \
+      flake lock --offline "${overrides[@]}" )
+fi
 
 # ── 恢复 root-state（sops 私钥必须在首次启动前到位）──────────────────
 if [ "$NO_ROOTSTATE" -eq 0 ]; then
