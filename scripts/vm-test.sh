@@ -45,6 +45,11 @@ do_assemble() {
   for r in qnap-aio router-container yunshu-nix; do
     tar czf "$tmp/$r.tar.gz" --exclude=.git --exclude=result --exclude='result-*' -C "$WS" "$r" || die "打包 $r 失败"
   done
+  # VM 拉不到 GitHub，nixpkgs 源码也得由宿主机送进去（再用 path: 覆盖）
+  local nixpkgs_src
+  nixpkgs_src=$(nix --extra-experimental-features 'nix-command flakes' eval --raw --impure \
+    --expr "(builtins.getFlake (toString $QNAP)).inputs.nixpkgs.outPath") || die "取 nixpkgs 源码失败"
+  tar czf "$tmp/nixpkgs.tar.gz" -C "$nixpkgs_src" . || die "打包 nixpkgs 失败"
   $SCP "$tmp"/*.tar.gz root@$VM:/root/ || die "scp 失败"
   rm -rf "$tmp"
 
@@ -54,6 +59,10 @@ do_assemble() {
       rm -rf "$r.new"; mkdir "$r.new"
       tar xzf "$r.tar.gz" -C "$r.new" --strip-components=1
     done
+    rm -rf /root/nixpkgs-unstable.new /root/nixpkgs-unstable
+    mkdir /root/nixpkgs-unstable.new
+    tar xzf nixpkgs.tar.gz -C /root/nixpkgs-unstable.new
+    mv /root/nixpkgs-unstable.new /root/nixpkgs-unstable
     # router-container / yunshu-nix：直接换掉
     rm -rf router-container yunshu-nix
     mv router-container.new router-container
@@ -70,7 +79,8 @@ do_assemble() {
 {
   description = "测试 VM 版 qnap-aio（去掉 QNAP 专属输入）";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    # 分支跟随 nixos-unstable；实际构建时用 --override-input 换成 VM 内的本地源码
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     router-container = {
       url = "git+https://github.com/allenmagic/router-container";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -128,12 +138,14 @@ VMTEST
 
 # ── 构建 ─────────────────────────────────────────────────────────────
 # 必须写成一行：换行插进远程命令会被 shell 当成另一条命令执行
-OVERRIDES="--override-input router-container path:/root/router-container --override-input router-container/yunshu-nix path:/root/yunshu-nix"
+OVERRIDES="--override-input nixpkgs path:/root/nixpkgs-unstable --override-input router-container path:/root/router-container --override-input router-container/yunshu-nix path:/root/yunshu-nix"
 
 do_build() {
   say "构建（用本地路径覆盖，不拉 GitHub）"
   # shellcheck disable=SC2086
-  $SSH "cd $REMOTE && nixos-rebuild build --flake .#default $OVERRIDES > /tmp/vm-build.log 2>&1; \
+  # VM 里 AAAA 记录会先被尝试但无 IPv6 出口，禁掉可避免下载卡住
+  $SSH "sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true; \
+        cd $REMOTE && nixos-rebuild build --flake .#default $OVERRIDES > /tmp/vm-build.log 2>&1; \
         echo EXIT=\$?; tail -3 /tmp/vm-build.log" || die "构建命令失败"
 }
 
