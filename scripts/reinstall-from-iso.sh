@@ -122,6 +122,14 @@ if [ -n "$ROOT_HASH_FILE" ]; then
   NO_ROOT_PASSWD=1
 fi
 
+# 新根会挂到 /mnt；放在 /mnt 下的归档/输入在挂载后会被遮住
+for p in "$BUNDLE" "$ROOTSTATE" "$INPUTS_DIR"; do
+  [ -n "$p" ] || continue
+  case "$p" in
+    /mnt/*) die "路径不能放在 /mnt 下（新根挂载后会遮住）：$p；请挂到 /backup 等目录" ;;
+  esac
+done
+
 # ── 目标盘识别与安全门 ───────────────────────────────────────────────
 [ -b "$DISK" ] || die "$DISK 不是块设备（建议用 /dev/disk/by-id/…）"
 DISK_REAL=$(readlink -f "$DISK")
@@ -234,8 +242,10 @@ mkfs.ext4 -L nixos "$P2"
 [ "$(blkid -s LABEL -o value "$P2")" = "nixos" ] || die "root 标签写入失败"
 
 info "挂载到 /mnt"
-mkdir -p /mnt /mnt/boot
+mkdir -p /mnt
 mount "$P2" /mnt
+# 必须先挂新根再创建 /mnt/boot，否则会被新根遮住
+mkdir -p /mnt/boot
 mount "$P1" /mnt/boot
 
 info "生成硬件配置"
